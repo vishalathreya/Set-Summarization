@@ -38,9 +38,6 @@ def kernel_herding(X, phi, num_samples):
         indices.append(new_ind)
         subsample.append(x_t)
 
-        if (i == 1):
-            print("Done subsample {}".format(i))
-
     return indices, subsample
 
 
@@ -132,21 +129,23 @@ def get_cluster_freq_vector(km, subsample_data, subsample_preds, num_clusters):
 
 
 def get_classification_input(subsample_data, subsample_data2, train_sets, test_sets, km, num_clusters, method=1, is_iid=0):
-    subsample_train, subsample_test, subsample_train_X, subsample_train_Y, subsample_test_X, subsample_test_Y = get_subsample_train_test_data(subsample_data, train_sets, test_sets)
-    # _, _, subsample_train_cluster_X, _, _, _ = get_subsample_train_test_data(subsample_data, train_sets, test_sets)
-    # subsample_train, subsample_test, subsample_train_X, subsample_train_Y, subsample_test_X, subsample_test_Y = get_subsample_train_test_data(subsample_data2, train_sets, test_sets)
+    # subsample_train, subsample_test, subsample_train_X, subsample_train_Y, subsample_test_X, subsample_test_Y = get_subsample_train_test_data(subsample_data, train_sets, test_sets)
+    _, _, subsample_train_cluster_X, _, _, _ = get_subsample_train_test_data(subsample_data, train_sets, test_sets)
+    subsample_train, subsample_test, subsample_train_X, subsample_train_Y, subsample_test_X, subsample_test_Y = get_subsample_train_test_data(subsample_data2, train_sets, test_sets)
 
     if(method == 2):
-        km = KMeans(init="k-means++", n_clusters=num_clusters, n_init=4)
-        subsample_train_preds = km.fit_predict(subsample_train_X)
+        km = KMeans(init="k-means++", n_clusters=num_clusters, n_init=10)
+        # subsample_train_preds = km.fit_predict(subsample_train_X)
+        subsample_train_preds = km.fit_predict(subsample_train_cluster_X)
     else:
         # Fit cluster on IID train data
         if(is_iid):
-            subsample_train_preds = km.fit_predict(subsample_train_X)
+            # subsample_train_preds = km.fit_predict(subsample_train_X)
+            subsample_train_preds = km.fit_predict(subsample_train_cluster_X)
         else:
             subsample_train_preds = km.predict(subsample_train_X)
 
-    # subsample_train_preds = km.predict(subsample_train_X)
+    subsample_train_preds = km.predict(subsample_train_X)
     subsample_test_preds = km.predict(subsample_test_X)
 
     subsample_train_vec, subsample_train_labels, subsample_train_sample_sets = get_cluster_freq_vector(km, subsample_train, subsample_train_preds, num_clusters=km.cluster_centers_.shape[0])
@@ -155,11 +154,23 @@ def get_classification_input(subsample_data, subsample_data2, train_sets, test_s
     return subsample_train_vec, subsample_train_labels, subsample_test_vec, subsample_test_labels
 
 
+def get_cluster_centers(subsample_data, train_sets, test_sets, num_clusters=15, method=2):
+    """
+    Getting KMeans cluster centers. Trying to run it multiple times to see if they vary with each run by comparing them on TSNE plots
+    """
+    subsample_train, subsample_test, subsample_train_X, subsample_train_Y, subsample_test_X, subsample_test_Y = get_subsample_train_test_data(subsample_data, train_sets, test_sets)
+    if (method == 2):
+        km = KMeans(init="k-means++", n_clusters=num_clusters, n_init=10)
+        subsample_train_preds = km.fit_predict(subsample_train_X)
+        return km.cluster_centers_
+    else:
+        print("Method != 2. Cannot run. Exiting...")
+
 
 def train_classifier(xtrain, ytrain, xtest, ytest, model_type = 'svm'):
     if(model_type == 'svm'):
         param_grid = {'C': [0.1, 1, 100, 1000], 'kernel': ['rbf', 'poly'],
-                  'degree': [1, 2, 3, 4, 5, 6], 'gamma': [1, 0.1, 0.001, 0.0001]}
+                  'degree': [3, 4, 6], 'gamma': [1, 0.1, 0.001, 0.0001]}
         model = SVC()
     else:
         param_grid = {'n_estimators': [200, 500, 1000, 5000]}
