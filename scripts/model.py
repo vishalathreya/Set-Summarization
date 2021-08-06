@@ -52,7 +52,7 @@ def geosketch_main(X, num_subsamples, phi=None):
     geo_samples = X[geo_indices]
 
     geo_rf = None
-    if (phi):
+    if(phi is not None):
         geo_rf = phi[geo_indices]
 
     return geo_indices, geo_samples, geo_rf
@@ -69,7 +69,7 @@ def hopper_main(X, num_subsamples, phi=None):
     hop_samples = X[hop_indices]
 
     hop_rf = None
-    if (phi):
+    if(phi is not None):
         hop_rf = phi[hop_indices]
 
     return hop_indices, hop_samples, hop_rf

@@ -26,19 +26,21 @@ def download_gdrive_file(file_id, output_file_name):
 
 def merge_anndata(folder_path, file_regex, output_filename):
     files = os.listdir(folder_path)
-    to_merge = [i for i in files if file_regex in i]
+    to_merge = [i for i in files if file_regex in i and i.endswith("h5ad")]
     print(len(set(to_merge)), to_merge[0])
-    anndata_lst = [anndata.read_h5ad(os.path.join(folder_path,i)) for i in to_merge]
+    anndata_lst = [anndata.read_h5ad(os.path.join(folder_path, i)) for i in to_merge]
     merged_data = anndata.concat(anndata_lst)
 
     merged_data.write(os.path.join(folder_path, output_filename))
 
-    return merged_data
+def merge_npy(folder_path, file_regex, output_filename):
+    files = os.listdir(folder_path)
+    to_merge = sorted([i for i in files if file_regex in i and i.endswith("npy")])
+    print(len(set(to_merge)), to_merge[0])
+    npy_lst = [np.load(os.path.join(folder_path, i)).max(axis=0) for i in to_merge]
+    merged_data = np.vstack(npy_lst)
 
-folder_path = "/home/athreya/private/set_summarization/data/hop_samples"
-file_regex = "hop"
-output_filename = "hop_subsamples_0.5k_per_set.h5ad"
-merge_anndata(folder_path, file_regex, output_filename)
+    np.save(os.path.join(folder_path, output_filename), merged_data)
 
 
 def get_preeclampsia_data(data_path):

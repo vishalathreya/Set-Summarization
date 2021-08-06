@@ -13,15 +13,14 @@ from sklearn.manifold import TSNE
 from sklearn.cluster import KMeans
 from sklearn.preprocessing import StandardScaler
 
-
-from sklearn.manifold import TSNE
+import logging
 
 import pandas as pd
 
 from model import *
+import utils
 
-
-start, end, num_processes, gamma, proc = int(sys.argv[1]), int(sys.argv[2]), int(sys.argv[3]), float(sys.argv[4]), sys.argv[5]
+start, end, num_processes, proc, scale_factor = int(sys.argv[1]), int(sys.argv[2]), int(sys.argv[3]), sys.argv[4], float(sys.argv[5])
 
 def preprocess_input(input_data):
     hvtn_req_markers = ["FSC-A", "FSC-H", "CD4", "SSC-A", "ViViD", "TNFa", "IL4", "IFNg", "CD8", "CD3", "IL2"]
@@ -49,28 +48,6 @@ def get_iid_subsamples(data, num_samples_per_set):
     return iid_sample_data
 
 
-# Main
-# input_data = anndata.read_h5ad(data_path + "hvtn.h5ad")
-# standard_data = preprocess_input(input_data)
-# standard_data.write(os.path.join(data_path, "hvtn_standard_scaler_preprocessed.h5ad"))
-
-# IID subsampling
-#data_path = "/home/athreya/private/set_summarization/data/preeclampsia"
-data_path = "/home/athreya/private/set_summarization/data/"
-num_samples_per_set = 500
-# data = anndata.read_h5ad(os.path.join(data_path, "preeclampsia_preprocessed.h5ad"))
-data = anndata.read_h5ad(os.path.join(data_path, "hvtn_preprocessed.h5ad"))
-iid_sample_data = get_iid_subsamples(data, num_samples_per_set)
-iid_sample_data.write(os.path.join(data_path, "iid_subsamples_{}k_per_set.h5ad".format(num_samples_per_set/1000)))
-
-
-# KH subsampling
-fcs_file = data.obs.FCS_File.values.unique()[start:end]
-print(fcs_file)
-print()
-print()
-
-
 def get_gamma_range(X):
     from scipy.spatial import distance_matrix
     inds = np.random.choice(X.shape[0], size=1000)
@@ -91,97 +68,210 @@ def nn_gamma_range(X):
 
     return gammas_3nn
 
-def parallel_kh_subsampling(fcs_filename):
+
+def parallel_subsampling(fcs_filename):
     global num_samples_per_set
     fcs_data = data[data.obs.FCS_File == fcs_filename]
     fcs_X = fcs_data.X
+    label = fcs_data.obs.label.unique()[0]
+    label_vec = np.repeat(label, num_samples_per_set).reshape(-1, 1)
+
     gammas = get_gamma_range(fcs_X)
-    gamma = gammas[3]  # gamma_0 value
-    print("Starting {} -> gamma_0 = {}, on process {}".format(fcs_filename, gamma, current_process().pid))
+    gamma = gammas[3]*scale_factor  # gamma_0 value
+    print("Starting {} -> gamma = {}, on process {}".format(fcs_filename, gamma, current_process().pid))
+
     phi = random_feats(fcs_X, gamma)
+    print("Calculated Random Features on {}".format(fcs_filename))
+
+    # IID subsamples
+    iid_indices = np.random.choice(fcs_X.shape[0], num_samples_per_set, replace=False)
+    iid_sample_index = fcs_data.obs.iloc[iid_indices].index
+    iid_sample_data = fcs_data[fcs_data.obs.index.isin(iid_sample_index)]
+    iid_rf = phi[iid_indices]
+    iid_rf = np.hstack((iid_rf, label_vec))
+    iid_sample_data.write(os.path.join(output_data_path, "iid_samples", "iid_subsamples_{}k_per_set_{}_gamma{}x.h5ad".format(num_samples_per_set / 1000, fcs_filename.split(".")[0], scale_factor)))
+    np.save(os.path.join(output_data_path, "iid_samples", "{}_gamma{}x_iidrf.npy".format(fcs_filename.split(".")[0], scale_factor)), iid_rf)
+
+    # Geo
+    geo_indices, geo_samples, geo_rf = geosketch_main(fcs_X, num_samples_per_set, phi)
+    geo_sample_data = fcs_data[fcs_data.obs.iloc[geo_indices].index]
+    geo_rf = np.hstack((geo_rf, label_vec))
+    print("Finished Geosketch on {}.".format(fcs_filename))
+    geo_sample_data.write(os.path.join(output_data_path, "geo_samples", "geo_subsamples_{}k_per_set_{}_gamma{}x.h5ad".format(num_samples_per_set / 1000, fcs_filename.split(".")[0], scale_factor)))
+    np.save(os.path.join(output_data_path, "geo_samples", "{}_gamma{}x_georf.npy".format(fcs_filename.split(".")[0], scale_factor)), geo_rf)
+
+    # Hopper
+    hop_indices, hop_samples, hop_rf = hopper_main(fcs_X, num_samples_per_set, phi)
+    hop_sample_data = fcs_data[fcs_data.obs.iloc[hop_indices].index]
+    hop_rf = np.hstack((hop_rf, label_vec))
+    print("Finished Hopper on {}".format(fcs_filename))
+    hop_sample_data.write(os.path.join(output_data_path, "hop_samples", "hop_subsamples_{}k_per_set_{}_gamma{}x.h5ad".format(num_samples_per_set / 1000, fcs_filename.split(".")[0], scale_factor)))
+    np.save(os.path.join(output_data_path, "hop_samples", "{}_gamma{}x_hoprf.npy".format(fcs_filename.split(".")[0], scale_factor)), hop_rf)
+
+    # KH
     kh_indices, kh_samples, kh_rf = kernel_herding_main(fcs_X, phi, num_samples_per_set)
     kh_sample_data = fcs_data[fcs_data.obs.iloc[kh_indices].index]
-
-    print("Finished {} on process {}. Data size = {}".format(fcs_filename, current_process().pid, kh_sample_data.X.shape))
-    kh_sample_data.write(os.path.join(data_path, "kh_samples", "kh_subsamples_{}k_per_set_{}_gamma0.h5ad".format(num_samples_per_set/1000, fcs_filename.split(".")[0])))
-
-
-def parallel_geo_hopper_subsampling(fcs_filename):
-    global num_samples_per_set
-    print("Starting {} on process {}".format(fcs_filename, current_process().pid))
-    fcs_data = data[data.obs.FCS_File == fcs_filename]
-    fcs_X = fcs_data.X
-    geo_indices, geo_samples, geo_rf = geosketch_main(fcs_X, num_samples_per_set)
-    hop_indices, hop_samples, hop_rf = hopper_main(fcs_X, num_samples_per_set)
-
-    geo_sample_data = fcs_data[fcs_data.obs.iloc[geo_indices].index]
-    hop_sample_data = fcs_data[fcs_data.obs.iloc[hop_indices].index]
-
-    print("Finished Geosketch on {} on process {}. Data size = {}".format(fcs_filename, current_process().pid, geo_sample_data.X.shape))
-    print("Finished Hopper on {} on process {}. Data size = {}".format(fcs_filename, current_process().pid, hop_sample_data.X.shape))
-
-    geo_sample_data.write(os.path.join(data_path, "geo_samples", "geo_subsamples_{}k_per_set_{}.h5ad".format(num_samples_per_set / 1000, fcs_filename.split(".")[0])))
-    hop_sample_data.write(os.path.join(data_path, "hop_samples", "hop_subsamples_{}k_per_set_{}.h5ad".format(num_samples_per_set / 1000, fcs_filename.split(".")[0])))
+    kh_rf = np.hstack((kh_rf, label_vec))
+    print("Finished KH on {}.".format(fcs_filename))
+    kh_sample_data.write(os.path.join(output_data_path, "kh_samples", "kh_subsamples_{}k_per_set_{}_gamma{}x.h5ad".format(num_samples_per_set/1000, fcs_filename.split(".")[0], scale_factor)))
+    np.save(os.path.join(output_data_path, "kh_samples", "{}_gamma{}x_khrf.npy".format(fcs_filename.split(".")[0], scale_factor)), kh_rf)
 
 
-#
-# pool = Pool(processes=num_processes)
-# if(proc == 'geo'):
-#     pool.map(parallel_geo_hopper_subsampling, fcs_file)
-# else:
-#     pool.map(parallel_kh_subsampling, fcs_file)
-# pool.close()
 
 
-# KFold -> clustering -> cluster_freq vector -> classifier
 data_path = "/home/athreya/private/set_summarization/data/"
+output_data_path = "/playpen-ssd/athreya/set_summarization/data/hvtn"
 # data_path = "/home/athreya/private/set_summarization/data/preeclampsia"
 num_samples_per_set = 500
-iid_sample_data = anndata.read_h5ad(os.path.join(data_path, "iid_subsamples_{}k_per_set_2.h5ad".format(num_samples_per_set / 1000)))
-kh_sample_data = anndata.read_h5ad(os.path.join(data_path, "kh_subsamples_{}k_per_set_gamma0_2.h5ad".format(num_samples_per_set / 1000)))
-geo_sample_data = anndata.read_h5ad(os.path.join(data_path, "geo_subsamples_{}k_per_set_2.h5ad".format(num_samples_per_set / 1000)))
-hop_sample_data = anndata.read_h5ad(os.path.join(data_path, "hop_subsamples_{}k_per_set_2.h5ad".format(num_samples_per_set / 1000)))
 
-iid_sample_data2 = anndata.read_h5ad(os.path.join(data_path, "iid_subsamples_{}k_per_set.h5ad".format(num_samples_per_set / 1000)))
-kh_sample_data2 = anndata.read_h5ad(os.path.join(data_path, "kh_subsamples_{}k_per_set_gamma0.h5ad".format(num_samples_per_set / 1000)))
-geo_sample_data2 = anndata.read_h5ad(os.path.join(data_path, "geo_subsamples_{}k_per_set.h5ad".format(num_samples_per_set / 1000)))
-hop_sample_data2 = anndata.read_h5ad(os.path.join(data_path, "hop_subsamples_{}k_per_set.h5ad".format(num_samples_per_set / 1000)))
+if(proc == 'subsample'):
+    # Main
+    # input_data = anndata.read_h5ad(data_path + "hvtn.h5ad")
+    # standard_data = preprocess_input(input_data)
+    # standard_data.write(os.path.join(data_path, "hvtn_standard_scaler_preprocessed.h5ad"))
+
+    # data = anndata.read_h5ad(os.path.join(data_path, "preeclampsia_preprocessed.h5ad"))
+    data = anndata.read_h5ad(os.path.join(data_path, "hvtn_preprocessed.h5ad"))
+    print("Finished reading preprocessed data. Starting {} pools".format(num_processes))
+    # KH subsampling
+    fcs_file = data.obs.FCS_File.values.unique()[start:end]
+
+    pool = Pool(processes=num_processes)
+    pool.map(parallel_subsampling, fcs_file)
+    pool.close()
 
 
-kf5 = KFold(n_splits=5, shuffle=True)
-fcs_files = iid_sample_data.obs.FCS_File.values.unique()
+if(proc == 'merge'):
+    import shutil
+    for method in ["iid", "kh", "hop", "geo"]:
+        folder_path = os.path.join(output_data_path, "{}_samples".format(method))
+        file_regex = method
+        iteration = 5
+        # output_file_name = "{}_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(method, num_samples_per_set / 1000, scale_factor, iteration)
+        # utils.merge_anndata(folder_path, file_regex, output_file_name)
+        # shutil.move(os.path.join(folder_path, output_file_name), os.path.join(output_data_path, output_file_name))
+        output_file_name = "{}_maxvector_{}k_per_set_gamma{}x_{}.npy".format(method, num_samples_per_set / 1000, scale_factor, iteration)
+        utils.merge_npy(folder_path, file_regex, output_file_name)
+        shutil.move(os.path.join(folder_path, output_file_name), os.path.join(output_data_path, output_file_name))
+        print("Merged {}".format(method))
 
-method = 2
-for method in (1,2):
-    for num_clusters in (15, 30, 50):
-        results = []
-        print("Method = {}, # Clusters = {}".format(method, num_clusters))
-        for i, (train_inds, test_inds) in enumerate(kf5.split(fcs_files)):
-            # Splitting out train and test sample set fcs files
-            train_sets, test_sets = fcs_files[train_inds], fcs_files[test_inds]
-            ## IID
-            km = KMeans(init="k-means++", n_clusters=num_clusters, n_init=10)
-            iid_train_vec, iid_train_labels, iid_test_vec, iid_test_labels = get_classification_input(iid_sample_data, iid_sample_data2, train_sets, test_sets, km, num_clusters, method, is_iid=1)
-            best_params, acc, cf_matrix = train_classifier(iid_train_vec, iid_train_labels, iid_test_vec, iid_test_labels, model_type='svm')
-            results.append([i+1, "iid", acc, cf_matrix])
 
-            # KH
-            kh_train_vec, kh_train_labels, kh_test_vec, kh_test_labels = get_classification_input(kh_sample_data, kh_sample_data2, train_sets, test_sets, km, num_clusters, method, is_iid=0)
-            best_params, acc, cf_matrix = train_classifier(kh_train_vec, kh_train_labels, kh_test_vec, kh_test_labels, model_type='svm')
-            results.append([i + 1, "kh", acc, cf_matrix])
+if(proc == 'classify'):
+    # KFold -> clustering -> cluster_freq vector -> classifier
+    logging.basicConfig(filename=os.path.join(data_path, 'classify.log'), filemode='w', format='%(name)s - %(levelname)s - %(message)s')
 
-            # Geo
-            geo_train_vec, geo_train_labels, geo_test_vec, geo_test_labels = get_classification_input(geo_sample_data, geo_sample_data2, train_sets, test_sets, km, num_clusters, method, is_iid=0)
-            best_params, acc, cf_matrix = train_classifier(geo_train_vec, geo_train_labels, geo_test_vec, geo_test_labels, model_type='svm')
-            results.append([i + 1, "geo", acc, cf_matrix])
+    for iteration1, iteration2 in [(i,j) for i in range(1,4) for j in range(1,4) if(i!=j)]:
+        logging.info("Reading data for iteration1 = {}, iteration2 = {}".format(iteration1, iteration2))
+        iid_sample_data = anndata.read_h5ad(os.path.join(output_data_path, "iid_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, scale_factor, iteration1)))
+        kh_sample_data = anndata.read_h5ad(os.path.join(output_data_path, "kh_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, scale_factor, iteration1)))
+        geo_sample_data = anndata.read_h5ad(os.path.join(output_data_path, "geo_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, scale_factor, iteration1)))
+        hop_sample_data = anndata.read_h5ad(os.path.join(output_data_path, "hop_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, scale_factor, iteration1)))
 
-            # Hopper
-            hop_train_vec, hop_train_labels, hop_test_vec, hop_test_labels = get_classification_input(hop_sample_data, hop_sample_data2, train_sets, test_sets, km, num_clusters, method, is_iid=0)
-            best_params, acc, cf_matrix = train_classifier(hop_train_vec, hop_train_labels, hop_test_vec, hop_test_labels, model_type='svm')
-            results.append([i + 1, "hop", acc, cf_matrix])
+        iid_sample_data2 = anndata.read_h5ad(os.path.join(output_data_path, "iid_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, scale_factor, iteration2)))
+        kh_sample_data2 = anndata.read_h5ad(os.path.join(output_data_path, "kh_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, scale_factor, iteration2)))
+        geo_sample_data2 = anndata.read_h5ad(os.path.join(output_data_path, "geo_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, scale_factor, iteration2)))
+        hop_sample_data2 = anndata.read_h5ad(os.path.join(output_data_path, "hop_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, scale_factor, iteration2)))
 
-        df = pd.DataFrame(results, columns=['Fold #', "method", "Accuracy", "CF_matrix"])
-        df2 = df.set_index(['Fold #', 'method'])
-        print(df2.groupby("method").mean())
-        # print(df2)
+
+        for num_trials in range(10):
+            logging.info("Starting trial {}".format(num_trials+1))
+            kf5 = KFold(n_splits=5, shuffle=True)
+            fcs_files = iid_sample_data.obs.FCS_File.values.unique()
+
+            final_results = pd.DataFrame()
+            for method in (1,2):
+                for num_clusters in (15, 30, 50):
+                    results = []
+                    print("Method = {}, # Clusters = {}".format(method, num_clusters))
+                    for i, (train_inds, test_inds) in enumerate(kf5.split(fcs_files)):
+                        # Splitting out train and test sample set fcs files
+                        train_sets, test_sets = fcs_files[train_inds], fcs_files[test_inds]
+                        ## IID
+                        km = KMeans(init="k-means++", n_clusters=num_clusters, n_init=10)
+                        iid_train_vec, iid_train_labels, iid_test_vec, iid_test_labels = get_classification_input(iid_sample_data, iid_sample_data2, train_sets, test_sets, km, num_clusters, method, is_iid=1)
+                        best_params, acc, cf_matrix = train_classifier(iid_train_vec, iid_train_labels, iid_test_vec, iid_test_labels, model_type='svm')
+                        results.append([i+1, "iid", acc])
+
+                        # KH
+                        kh_train_vec, kh_train_labels, kh_test_vec, kh_test_labels = get_classification_input(kh_sample_data, kh_sample_data2, train_sets, test_sets, km, num_clusters, method, is_iid=0)
+                        best_params, acc, cf_matrix = train_classifier(kh_train_vec, kh_train_labels, kh_test_vec, kh_test_labels, model_type='svm')
+                        results.append([i + 1, "kh", acc])
+
+                        # Geo
+                        geo_train_vec, geo_train_labels, geo_test_vec, geo_test_labels = get_classification_input(geo_sample_data, geo_sample_data2, train_sets, test_sets, km, num_clusters, method, is_iid=0)
+                        best_params, acc, cf_matrix = train_classifier(geo_train_vec, geo_train_labels, geo_test_vec, geo_test_labels, model_type='svm')
+                        results.append([i + 1, "geo", acc])
+
+                        # Hopper
+                        hop_train_vec, hop_train_labels, hop_test_vec, hop_test_labels = get_classification_input(hop_sample_data, hop_sample_data2, train_sets, test_sets, km, num_clusters, method, is_iid=0)
+                        best_params, acc, cf_matrix = train_classifier(hop_train_vec, hop_train_labels, hop_test_vec, hop_test_labels, model_type='svm')
+                        results.append([i + 1, "hop", acc])
+
+                    df = pd.DataFrame(results, columns=['Fold #', "subsampling", "Acc"])
+                    df2 = df.set_index(['Fold #', 'subsampling'])
+                    df_final = df2.groupby("subsampling").mean().reset_index()
+                    df_final['clusters'] = num_clusters
+                    df_final['method'] = method
+                    final_results = pd.concat((final_results, df_final))
+
+            logging.info("Finished for trial {}. Writing to file".format(num_trials+1))
+            classification_results_file = os.path.join(data_path, "classification_results_{}.csv".format(scale_factor))
+            if(os.path.isfile(classification_results_file)):
+                final_results.to_csv(classification_results_file, mode='a', header=None, index=False)
+            else:
+                final_results.to_csv(classification_results_file, index=False)
+        
+        
+        
+        
+if(proc == 'mean'):
+    iteration1 = 1
+    iid_sample_data = np.load(os.path.join(output_data_path, "iid_meanvector_{}k_per_set_gamma{}x_{}.npy".format(num_samples_per_set / 1000, scale_factor, iteration1)))
+    kh_sample_data = np.load(os.path.join(output_data_path, "kh_meanvector_{}k_per_set_gamma{}x_{}.npy".format(num_samples_per_set / 1000, scale_factor, iteration1)))
+    geo_sample_data = np.load(os.path.join(output_data_path, "geo_meanvector_{}k_per_set_gamma{}x_{}.npy".format(num_samples_per_set / 1000, scale_factor, iteration1)))
+    hop_sample_data = np.load(os.path.join(output_data_path, "hop_meanvector_{}k_per_set_gamma{}x_{}.npy".format(num_samples_per_set / 1000, scale_factor, iteration1)))
+
+    iid_x, iid_y = iid_sample_data[:, :-1], iid_sample_data[:, -1]
+    kh_x, kh_y = kh_sample_data[:, :-1], kh_sample_data[:, -1]
+    geo_x, geo_y = geo_sample_data[:, :-1], geo_sample_data[:, -1]
+    hop_x, hop_y = hop_sample_data[:, :-1], hop_sample_data[:, -1]
+
+    kf5 = KFold(n_splits=5, shuffle=True)
+
+    results = []
+    for i, (train_inds, test_inds) in enumerate(kf5.split(iid_x)):
+        # Splitting out train and test sample set fcs files
+
+        ## IID
+        iid_train_vec, iid_train_labels, iid_test_vec, iid_test_labels = iid_x[train_inds], iid_y[train_inds], iid_x[test_inds], iid_y[test_inds]
+        best_params, acc, cf_matrix = train_classifier(iid_train_vec, iid_train_labels, iid_test_vec, iid_test_labels, model_type='svm')
+        results.append([i+1, "iid", acc])
+        
+        ## KH
+        kh_train_vec, kh_train_labels, kh_test_vec, kh_test_labels = kh_x[train_inds], kh_y[train_inds], kh_x[test_inds], kh_y[test_inds]
+        best_params, acc, cf_matrix = train_classifier(kh_train_vec, kh_train_labels, kh_test_vec, kh_test_labels, model_type='svm')
+        results.append([i+1, "kh", acc])
+        
+        
+        ## Geo
+        geo_train_vec, geo_train_labels, geo_test_vec, geo_test_labels = geo_x[train_inds], geo_y[train_inds], geo_x[test_inds], geo_y[test_inds]
+        best_params, acc, cf_matrix = train_classifier(geo_train_vec, geo_train_labels, geo_test_vec, geo_test_labels, model_type='svm')
+        results.append([i+1, "geo", acc])
+        
+        
+        ## Hopper
+        hop_train_vec, hop_train_labels, hop_test_vec, hop_test_labels = hop_x[train_inds], hop_y[train_inds], hop_x[test_inds], hop_y[test_inds]
+        best_params, acc, cf_matrix = train_classifier(hop_train_vec, hop_train_labels, hop_test_vec, hop_test_labels, model_type='svm')
+        results.append([i+1, "hop", acc])
+
+    df = pd.DataFrame(results, columns=['Fold #', "subsampling", "Acc"])
+    df2 = df.set_index(['Fold #', 'subsampling'])
+    df_final = df2.groupby("subsampling").mean().reset_index()
+
+
+    classification_results_file = os.path.join(data_path, "meanvector_classification_results.csv")
+    if(os.path.isfile(classification_results_file)):
+        df_final.to_csv(classification_results_file, mode='a', header=None, index=False)
+    else:
+        df_final.to_csv(classification_results_file, index=False)
 
