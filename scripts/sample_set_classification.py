@@ -4,7 +4,7 @@ import sys
 import anndata
 import pickle as pkl
 
-from multiprocessing import Pool, current_process
+from multiprocessing import Pool, current_process, Lock
 
 import sklearn
 from sklearn.model_selection import train_test_split, KFold
@@ -20,7 +20,7 @@ import pandas as pd
 from model import *
 import utils
 
-start, end, num_processes, proc, scale_factor = int(sys.argv[1]), int(sys.argv[2]), int(sys.argv[3]), sys.argv[4], float(sys.argv[5])
+start, end, num_processes, proc, scale_factor, iteration = int(sys.argv[1]), int(sys.argv[2]), int(sys.argv[3]), sys.argv[4], float(sys.argv[5]), int(sys.argv[6])
 
 def preprocess_input(input_data):
     hvtn_req_markers = ["FSC-A", "FSC-H", "CD4", "SSC-A", "ViViD", "TNFa", "IL4", "IFNg", "CD8", "CD3", "IL2"]
@@ -98,8 +98,8 @@ def parallel_subsampling(fcs_filename):
     label_vec = np.repeat(label, num_samples_per_set).reshape(-1, 1)
 
     gammas = get_gamma_range(fcs_X)
-    gamma = gammas[3]*scale_factor  # gamma_0 value
-    print("Starting {} -> gamma = {}, on process {}".format(fcs_filename, gamma, current_process().pid))
+    gamma = gammas[3] * scale_factor  # gammas[3] = gamma_0 value
+    print("Starting {} -> gamma0 = {}, scale_factor = {}, gamma = {}, on process {}".format(fcs_filename, gammas[3], scale_factor, gamma, current_process().pid))
 
     phi = random_feats(fcs_X, gamma)
     print("Calculated Random Features on {}".format(fcs_filename))
@@ -137,6 +137,15 @@ def parallel_subsampling(fcs_filename):
     kh_sample_data.write(os.path.join(output_data_path, "kh_samples", "kh_subsamples_{}k_per_set_{}_gamma{}x.h5ad".format(num_samples_per_set/1000, fcs_filename.split(".")[0], scale_factor)))
     np.save(os.path.join(output_data_path, "kh_samples", "{}_gamma{}x_khrf.npy".format(fcs_filename.split(".")[0], scale_factor)), kh_rf)
 
+    # Writing sample set name to finished_sets.txt in case program hangs in the middle and we need to re-run for remaining sets
+    lock.acquire()
+    print("Acquired lock for {}".format(fcs_filename))
+    print("Finished {}. Writing to finished_sets.txt".format(fcs_filename))
+    with open(os.path.join(output_data_path, "finished_sets.txt"), "a") as f:
+        f.write(fcs_filename)
+        f.write("\n")
+    lock.release()
+    print("Released lock for {}".format(fcs_filename))
 
 
 
@@ -149,13 +158,18 @@ if(proc == 'subsample'):
     # Main
     # input_data = anndata.read_h5ad(data_path + "hvtn.h5ad")
     # standard_data = preprocess_input(input_data)
-    # standard_data.write(os.path.join(data_path, "hvtn_standard_scaler_preprocessed.h5ad"))
 
     # data = anndata.read_h5ad(os.path.join(data_path, "preeclampsia_preprocessed.h5ad"))
     data = anndata.read_h5ad(os.path.join(data_path, "hvtn_preprocessed.h5ad"))
     print("Finished reading preprocessed data. Starting {} pools".format(num_processes))
     # KH subsampling
     fcs_file = data.obs.FCS_File.values.unique()[start:end]
+
+    lock = Lock()
+
+    # Overwrite finished sample sets info from previous run with Current Run params
+    with open(os.path.join(output_data_path, "finished_sets.txt"), 'w') as f:
+        f.write("Finished Sets for Scale Factor = {}, Iteration = {} -:".format(scale_factor, iteration))
 
     pool = Pool(processes=num_processes)
     pool.map(parallel_subsampling, fcs_file)
@@ -166,42 +180,55 @@ if(proc == 'merge'):
     import shutil
     for method in ["iid", "kh", "hop", "geo"]:
         folder_path = os.path.join(output_data_path, "{}_samples".format(method))
-        file_regex = method
-        iteration = 5
-        # output_file_name = "{}_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(method, num_samples_per_set / 1000, scale_factor, iteration)
-        # utils.merge_anndata(folder_path, file_regex, output_file_name)
-        # shutil.move(os.path.join(folder_path, output_file_name), os.path.join(output_data_path, output_file_name))
-        output_file_name = "{}_maxvector_{}k_per_set_gamma{}x_{}.npy".format(method, num_samples_per_set / 1000, scale_factor, iteration)
+        file_regex = "gamma{}x".format(scale_factor)
+
+        # Merge original subsample anndata
+        output_file_name = "{}_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(method, num_samples_per_set / 1000, scale_factor, iteration)
+        utils.merge_anndata(folder_path, file_regex, output_file_name)
+        shutil.move(os.path.join(folder_path, output_file_name), os.path.join(output_data_path, output_file_name))
+
+        # Merge KHRF subsample npy files
+        output_file_name = "{}_khrf_{}k_per_set_gamma{}x_{}.npy".format(method, num_samples_per_set / 1000, scale_factor, iteration)
         utils.merge_npy(folder_path, file_regex, output_file_name)
         shutil.move(os.path.join(folder_path, output_file_name), os.path.join(output_data_path, output_file_name))
         print("Merged {}".format(method))
 
+    with open(os.path.join(output_data_path, "finished_sets.txt"), 'w') as f:
+        f.write("Finished Merge for Scale Factor = {}, Iteration = {} -:".format(scale_factor, iteration))
+
 
 if(proc == 'classify'):
     # KFold -> clustering -> cluster_freq vector -> classifier
-    logging.basicConfig(filename=os.path.join(data_path, 'classify.log'), filemode='w', format='%(name)s - %(levelname)s - %(message)s')
 
-    for iteration1, iteration2 in [(i,j) for i in range(1,4) for j in range(1,4) if(i!=j)]:
+    for iteration1, iteration2 in [(i,j) for i in range(1,3) for j in range(1,3) if(i!=j)]:
         logging.info("Reading data for iteration1 = {}, iteration2 = {}".format(iteration1, iteration2))
-        iid_sample_data = anndata.read_h5ad(os.path.join(output_data_path, "iid_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, scale_factor, iteration1)))
-        kh_sample_data = anndata.read_h5ad(os.path.join(output_data_path, "kh_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, scale_factor, iteration1)))
-        geo_sample_data = anndata.read_h5ad(os.path.join(output_data_path, "geo_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, scale_factor, iteration1)))
-        hop_sample_data = anndata.read_h5ad(os.path.join(output_data_path, "hop_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, scale_factor, iteration1)))
+        # iid_sample_data = anndata.read_h5ad(os.path.join(output_data_path, "iid_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, scale_factor, iteration1)))
+        # geo_sample_data = anndata.read_h5ad(os.path.join(output_data_path, "geo_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, scale_factor, iteration1)))
+        # hop_sample_data = anndata.read_h5ad(os.path.join(output_data_path, "hop_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, scale_factor, iteration1)))
 
-        iid_sample_data2 = anndata.read_h5ad(os.path.join(output_data_path, "iid_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, scale_factor, iteration2)))
-        kh_sample_data2 = anndata.read_h5ad(os.path.join(output_data_path, "kh_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, scale_factor, iteration2)))
-        geo_sample_data2 = anndata.read_h5ad(os.path.join(output_data_path, "geo_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, scale_factor, iteration2)))
-        hop_sample_data2 = anndata.read_h5ad(os.path.join(output_data_path, "hop_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, scale_factor, iteration2)))
+        # iid_sample_data2 = anndata.read_h5ad(os.path.join(output_data_path, "iid_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, scale_factor, iteration2)))
+        # geo_sample_data2 = anndata.read_h5ad(os.path.join(output_data_path, "geo_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, scale_factor, iteration2)))
+        # hop_sample_data2 = anndata.read_h5ad(os.path.join(output_data_path, "hop_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, scale_factor, iteration2)))
 
+        kh_1x_data = anndata.read_h5ad(os.path.join(output_data_path, "kh_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, "1.0", iteration1)))
+        kh_1x_data2 = anndata.read_h5ad(os.path.join(output_data_path, "kh_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, "1.0", iteration2)))
+        kh_2x_data = anndata.read_h5ad(os.path.join(output_data_path, "kh_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, "2.0", iteration1)))
+        kh_2x_data2 = anndata.read_h5ad(os.path.join(output_data_path, "kh_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, "2.0", iteration2)))
+        kh_0_5x_data = anndata.read_h5ad(os.path.join(output_data_path, "kh_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, "0.5", iteration1)))
+        kh_0_5x_data2 = anndata.read_h5ad(os.path.join(output_data_path, "kh_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, "0.5", iteration2)))
+        kh_0_2x_data = anndata.read_h5ad(os.path.join(output_data_path, "kh_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, "0.2", iteration1)))
+        kh_0_2x_data2 = anndata.read_h5ad(os.path.join(output_data_path, "kh_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, "0.2", iteration2)))
 
         for num_trials in range(30):
             logging.info("Starting trial {}".format(num_trials+1))
             kf5 = KFold(n_splits=5, shuffle=True)
-            fcs_files = iid_sample_data.obs.FCS_File.values.unique()
+            fcs_files = kh_1x_data.obs.FCS_File.values.unique()
 
             final_results = pd.DataFrame()
-            for method in (1,2):
-                for num_clusters in (15, 30, 50):
+            # for method in (1, 2):
+            for method in (2):
+                # for num_clusters in (15, 30, 50):
+                for num_clusters in (30):
                     results = []
                     print("Method = {}, # Clusters = {}".format(method, num_clusters))
                     for i, (train_inds, test_inds) in enumerate(kf5.split(fcs_files)):

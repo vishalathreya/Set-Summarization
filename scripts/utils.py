@@ -26,8 +26,7 @@ def download_gdrive_file(file_id, output_file_name):
 
 def merge_anndata(folder_path, file_regex, output_filename):
     files = os.listdir(folder_path)
-    to_merge = [i for i in files if file_regex in i and i.endswith("h5ad")]
-    print(len(set(to_merge)), to_merge[0])
+    to_merge = sorted([i for i in files if file_regex in i and i.endswith("h5ad")])
     anndata_lst = [anndata.read_h5ad(os.path.join(folder_path, i)) for i in to_merge]
     merged_data = anndata.concat(anndata_lst)
 
@@ -36,7 +35,6 @@ def merge_anndata(folder_path, file_regex, output_filename):
 def merge_npy(folder_path, file_regex, output_filename):
     files = os.listdir(folder_path)
     to_merge = sorted([i for i in files if file_regex in i and i.endswith("npy")])
-    print(len(set(to_merge)), to_merge[0])
     npy_lst = [np.load(os.path.join(folder_path, i)) for i in to_merge]
     merged_data = np.vstack(npy_lst)
 
