@@ -37,7 +37,7 @@ def merge_npy(folder_path, file_regex, output_filename):
     files = os.listdir(folder_path)
     to_merge = sorted([i for i in files if file_regex in i and i.endswith("npy")])
     print(len(set(to_merge)), to_merge[0])
-    npy_lst = [np.load(os.path.join(folder_path, i)).max(axis=0) for i in to_merge]
+    npy_lst = [np.load(os.path.join(folder_path, i)) for i in to_merge]
     merged_data = np.vstack(npy_lst)
 
     np.save(os.path.join(folder_path, output_filename), merged_data)

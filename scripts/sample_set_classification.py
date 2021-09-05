@@ -69,6 +69,27 @@ def nn_gamma_range(X):
     return gammas_3nn
 
 
+def parallel_one_point_representation(fcs_filename):
+    global gammas
+    fcs_data = data[data.obs.FCS_File == fcs_filename]
+    fcs_X = fcs_data.X
+    label = fcs_data.obs.label.unique()[0]
+    label_vec = np.repeat(label, num_samples_per_set).reshape(-1, 1)
+
+    for gamma in gammas:
+        phi = random_feats(fcs_X, gamma, frequency_seed=0)
+        phi_mean = np.mean(phi, axis=0).reshape(1, -1)
+        phi_max = np.max(phi, axis=0).reshape(1, -1)
+        # Append label at the end of vectors
+        phi_mean = np.hstack((phi_mean, np.asarray([label]).reshape(1,-1)))
+        phi_max = np.hstack((phi_max, np.asarray([label]).reshape(1, -1)))
+        np.save(os.path.join(output_data_path, "one_point_rep", "{}_meanvec_gamma{}.npy".format(fcs_filename, gamma)), phi_mean)
+        np.save(os.path.join(output_data_path, "one_point_rep", "{}_maxvec_gamma{}.npy".format(fcs_filename, gamma)), phi_max)
+
+    print("Finished {}".format(fcs_filename))
+
+
+
 def parallel_subsampling(fcs_filename):
     global num_samples_per_set
     fcs_data = data[data.obs.FCS_File == fcs_filename]
@@ -173,7 +194,7 @@ if(proc == 'classify'):
         hop_sample_data2 = anndata.read_h5ad(os.path.join(output_data_path, "hop_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, scale_factor, iteration2)))
 
 
-        for num_trials in range(10):
+        for num_trials in range(30):
             logging.info("Starting trial {}".format(num_trials+1))
             kf5 = KFold(n_splits=5, shuffle=True)
             fcs_files = iid_sample_data.obs.FCS_File.values.unique()
@@ -189,22 +210,22 @@ if(proc == 'classify'):
                         ## IID
                         km = KMeans(init="k-means++", n_clusters=num_clusters, n_init=10)
                         iid_train_vec, iid_train_labels, iid_test_vec, iid_test_labels = get_classification_input(iid_sample_data, iid_sample_data2, train_sets, test_sets, km, num_clusters, method, is_iid=1)
-                        best_params, acc, cf_matrix = train_classifier(iid_train_vec, iid_train_labels, iid_test_vec, iid_test_labels, model_type='svm')
+                        model, acc, cf_matrix = train_classifier(iid_train_vec, iid_train_labels, iid_test_vec, iid_test_labels, model_type='svm')
                         results.append([i+1, "iid", acc])
 
                         # KH
                         kh_train_vec, kh_train_labels, kh_test_vec, kh_test_labels = get_classification_input(kh_sample_data, kh_sample_data2, train_sets, test_sets, km, num_clusters, method, is_iid=0)
-                        best_params, acc, cf_matrix = train_classifier(kh_train_vec, kh_train_labels, kh_test_vec, kh_test_labels, model_type='svm')
+                        model, acc, cf_matrix = train_classifier(kh_train_vec, kh_train_labels, kh_test_vec, kh_test_labels, model_type='svm')
                         results.append([i + 1, "kh", acc])
 
                         # Geo
                         geo_train_vec, geo_train_labels, geo_test_vec, geo_test_labels = get_classification_input(geo_sample_data, geo_sample_data2, train_sets, test_sets, km, num_clusters, method, is_iid=0)
-                        best_params, acc, cf_matrix = train_classifier(geo_train_vec, geo_train_labels, geo_test_vec, geo_test_labels, model_type='svm')
+                        model, acc, cf_matrix = train_classifier(geo_train_vec, geo_train_labels, geo_test_vec, geo_test_labels, model_type='svm')
                         results.append([i + 1, "geo", acc])
 
                         # Hopper
                         hop_train_vec, hop_train_labels, hop_test_vec, hop_test_labels = get_classification_input(hop_sample_data, hop_sample_data2, train_sets, test_sets, km, num_clusters, method, is_iid=0)
-                        best_params, acc, cf_matrix = train_classifier(hop_train_vec, hop_train_labels, hop_test_vec, hop_test_labels, model_type='svm')
+                        model, acc, cf_matrix = train_classifier(hop_train_vec, hop_train_labels, hop_test_vec, hop_test_labels, model_type='svm')
                         results.append([i + 1, "hop", acc])
 
                     df = pd.DataFrame(results, columns=['Fold #', "subsampling", "Acc"])
@@ -220,58 +241,58 @@ if(proc == 'classify'):
                 final_results.to_csv(classification_results_file, mode='a', header=None, index=False)
             else:
                 final_results.to_csv(classification_results_file, index=False)
-        
-        
-        
-        
-if(proc == 'mean'):
-    iteration1 = 1
-    iid_sample_data = np.load(os.path.join(output_data_path, "iid_meanvector_{}k_per_set_gamma{}x_{}.npy".format(num_samples_per_set / 1000, scale_factor, iteration1)))
-    kh_sample_data = np.load(os.path.join(output_data_path, "kh_meanvector_{}k_per_set_gamma{}x_{}.npy".format(num_samples_per_set / 1000, scale_factor, iteration1)))
-    geo_sample_data = np.load(os.path.join(output_data_path, "geo_meanvector_{}k_per_set_gamma{}x_{}.npy".format(num_samples_per_set / 1000, scale_factor, iteration1)))
-    hop_sample_data = np.load(os.path.join(output_data_path, "hop_meanvector_{}k_per_set_gamma{}x_{}.npy".format(num_samples_per_set / 1000, scale_factor, iteration1)))
-
-    iid_x, iid_y = iid_sample_data[:, :-1], iid_sample_data[:, -1]
-    kh_x, kh_y = kh_sample_data[:, :-1], kh_sample_data[:, -1]
-    geo_x, geo_y = geo_sample_data[:, :-1], geo_sample_data[:, -1]
-    hop_x, hop_y = hop_sample_data[:, :-1], hop_sample_data[:, -1]
-
-    kf5 = KFold(n_splits=5, shuffle=True)
-
-    results = []
-    for i, (train_inds, test_inds) in enumerate(kf5.split(iid_x)):
-        # Splitting out train and test sample set fcs files
-
-        ## IID
-        iid_train_vec, iid_train_labels, iid_test_vec, iid_test_labels = iid_x[train_inds], iid_y[train_inds], iid_x[test_inds], iid_y[test_inds]
-        best_params, acc, cf_matrix = train_classifier(iid_train_vec, iid_train_labels, iid_test_vec, iid_test_labels, model_type='svm')
-        results.append([i+1, "iid", acc])
-        
-        ## KH
-        kh_train_vec, kh_train_labels, kh_test_vec, kh_test_labels = kh_x[train_inds], kh_y[train_inds], kh_x[test_inds], kh_y[test_inds]
-        best_params, acc, cf_matrix = train_classifier(kh_train_vec, kh_train_labels, kh_test_vec, kh_test_labels, model_type='svm')
-        results.append([i+1, "kh", acc])
-        
-        
-        ## Geo
-        geo_train_vec, geo_train_labels, geo_test_vec, geo_test_labels = geo_x[train_inds], geo_y[train_inds], geo_x[test_inds], geo_y[test_inds]
-        best_params, acc, cf_matrix = train_classifier(geo_train_vec, geo_train_labels, geo_test_vec, geo_test_labels, model_type='svm')
-        results.append([i+1, "geo", acc])
-        
-        
-        ## Hopper
-        hop_train_vec, hop_train_labels, hop_test_vec, hop_test_labels = hop_x[train_inds], hop_y[train_inds], hop_x[test_inds], hop_y[test_inds]
-        best_params, acc, cf_matrix = train_classifier(hop_train_vec, hop_train_labels, hop_test_vec, hop_test_labels, model_type='svm')
-        results.append([i+1, "hop", acc])
-
-    df = pd.DataFrame(results, columns=['Fold #', "subsampling", "Acc"])
-    df2 = df.set_index(['Fold #', 'subsampling'])
-    df_final = df2.groupby("subsampling").mean().reset_index()
 
 
-    classification_results_file = os.path.join(data_path, "meanvector_classification_results.csv")
-    if(os.path.isfile(classification_results_file)):
-        df_final.to_csv(classification_results_file, mode='a', header=None, index=False)
-    else:
-        df_final.to_csv(classification_results_file, index=False)
+gamma_0 = 2.5
+gammas = [gamma_0 / i for i in (0.125, 0.25, 0.5, 1, 2, 4, 8)]
+if (proc == 'meanvector_prep'):
+    data = anndata.read_h5ad(os.path.join(data_path, "hvtn_preprocessed.h5ad"))
+    print("Finished reading preprocessed data. Starting {} pools".format(num_processes))
+    fcs_file = data.obs.FCS_File.values.unique()[start:end]
 
+    pool = Pool(processes=num_processes)
+    pool.map(parallel_one_point_representation, fcs_file)
+    pool.close()
+        
+
+# Run merge for mean and max vectors before running classify below (so that vectors from all sample sets are merged into 1 final vector)
+if(proc == 'mean_classify'):
+    for gamma in sorted(gammas):
+        mean_x, mean_y = np.load(os.path.join(output_data_path, "one_point_rep", "final_meanvec_gamma{}.npy".format(gamma)))[:, :2000], np.load(os.path.join(output_data_path, "one_point_rep", "final_meanvec_gamma{}.npy".format(gamma)))[:, 2000]
+        mean_khrf_x, mean_khrf_y = np.load(os.path.join(output_data_path, "one_point_rep", "final_meanvec_gamma0.5x_khrf.npy"))[:, :2000], np.load(os.path.join(output_data_path, "one_point_rep", "final_meanvec_gamma0.5x_khrf.npy"))[:, 2000]
+        # max_x, max_y = np.load(os.path.join(output_data_path, "one_point_rep", "final_maxvec_gamma{}.npy".format(gamma)))[:, :2000], np.load(os.path.join(output_data_path, "one_point_rep",  "final_maxvec_gamma{}.npy".format(gamma)))[:, 2000]
+        print("Running for gamma = {}".format(gamma))
+        kf5 = KFold(n_splits=5, shuffle=True)
+        results = []
+        for i, (train_inds, test_inds) in enumerate(kf5.split(mean_x)):
+            # Splitting out train and test sample set fcs files
+            # Testing on Global mean vectors
+            print("Training and Testing on Global")
+            train_vec, train_labels, test_vec, test_labels = mean_x[train_inds], mean_y[train_inds], mean_x[test_inds], mean_y[test_inds]
+            model, acc, cf_matrix = train_classifier(train_vec, train_labels, test_vec, test_labels, model_type='svm')
+            results.append([i+1, "trainglobal_testglobal", gamma, acc])
+
+            # Testing on KH mean vectors
+            print("Training on Global and Testing on KH")
+            preds = model.predict(mean_khrf_x)
+            acc = metrics.accuracy_score(mean_khrf_y, preds)
+            results.append([i + 1, "trainglobal_testKH", gamma, acc])
+
+            # Train on KH, test on KH
+            print("Training and Testing on KH")
+            train_vec, train_labels, test_vec, test_labels = mean_khrf_x[train_inds], mean_khrf_y[train_inds], mean_khrf_x[test_inds], mean_khrf_y[test_inds]
+            model, acc, cf_matrix = train_classifier(train_vec, train_labels, test_vec, test_labels, model_type='svm')
+            results.append([i + 1, "trainKH_testKH", gamma, acc])
+        
+    
+        df = pd.DataFrame(results, columns=['Fold #', "Rep", "Gamma", "Acc"])
+        # df2 = df.set_index(['Fold #', 'subsampling'])
+        # df_final = df2.groupby("subsampling").mean().reset_index()
+    
+    
+        classification_results_file = os.path.join(data_path, "meanvector_classification_KH_results.csv")
+        if(os.path.isfile(classification_results_file)):
+            df.to_csv(classification_results_file, mode='a', header=None, index=False)
+        else:
+            df.to_csv(classification_results_file, index=False)
+    

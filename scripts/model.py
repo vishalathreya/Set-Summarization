@@ -12,9 +12,13 @@ from sklearn.ensemble import RandomForestClassifier
 
 
 
-def random_feats(X, gamma=6):
+def random_feats(X, gamma=6, frequency_seed=None):
     scale = 1 / gamma
-    W = np.random.normal(scale=scale, size=(X.shape[1], 1000))
+    if(frequency_seed is not None):
+        np.random.seed(frequency_seed)
+        W = np.random.normal(scale=scale, size=(X.shape[1], 1000))
+    else:
+        W = np.random.normal(scale=scale, size=(X.shape[1], 1000))
     XW = np.dot(X, W)
     sin_XW = np.sin(XW)
     cos_XW = np.cos(XW)
@@ -167,10 +171,13 @@ def get_cluster_centers(subsample_data, train_sets, test_sets, num_clusters=15, 
         print("Method != 2. Cannot run. Exiting...")
 
 
-def train_classifier(xtrain, ytrain, xtest, ytest, model_type = 'svm'):
+def train_classifier(xtrain, ytrain, xtest, ytest, model_type='svm'):
     if(model_type == 'svm'):
         param_grid = {'C': [0.1, 1, 100, 1000], 'kernel': ['rbf', 'poly'],
                   'degree': [3, 4, 6], 'gamma': [1, 0.1, 0.001, 0.0001]}
+        model = SVC()
+    elif(model_type == 'svm_linear'):
+        param_grid = {'C': [0.1, 1, 100, 1000], 'kernel': ['linear'], 'tol': [1e-5]}
         model = SVC()
     else:
         param_grid = {'n_estimators': [200, 500, 1000, 5000]}
@@ -183,4 +190,4 @@ def train_classifier(xtrain, ytrain, xtest, ytest, model_type = 'svm'):
     acc = metrics.accuracy_score(ytest, preds)
     cf_matrix = metrics.confusion_matrix(ytest, preds)
 
-    return grid.best_params_, acc, cf_matrix
+    return grid, acc, cf_matrix
