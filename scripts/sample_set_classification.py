@@ -18,6 +18,7 @@ import logging
 import pandas as pd
 
 from model import *
+from train import *
 import utils
 
 start, end, num_processes, proc, scale_factor, iteration = int(sys.argv[1]), int(sys.argv[2]), int(sys.argv[3]), sys.argv[4], float(sys.argv[5]), int(sys.argv[6])
@@ -199,75 +200,13 @@ if(proc == 'merge'):
 
 if(proc == 'classify'):
     # KFold -> clustering -> cluster_freq vector -> classifier
+    num_sketches = 3
+    num_clusters = 30
+    # results_file = "classification_results_{}.csv".format(scale_factor)
+    # cross_validation(output_data_path, data_path, num_sketches, num_samples_per_set, results_file, scale_factor)
 
-    for iteration1, iteration2 in [(i,j) for i in range(1,3) for j in range(1,3) if(i!=j)]:
-        logging.info("Reading data for iteration1 = {}, iteration2 = {}".format(iteration1, iteration2))
-        # iid_sample_data = anndata.read_h5ad(os.path.join(output_data_path, "iid_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, scale_factor, iteration1)))
-        # geo_sample_data = anndata.read_h5ad(os.path.join(output_data_path, "geo_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, scale_factor, iteration1)))
-        # hop_sample_data = anndata.read_h5ad(os.path.join(output_data_path, "hop_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, scale_factor, iteration1)))
-
-        # iid_sample_data2 = anndata.read_h5ad(os.path.join(output_data_path, "iid_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, scale_factor, iteration2)))
-        # geo_sample_data2 = anndata.read_h5ad(os.path.join(output_data_path, "geo_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, scale_factor, iteration2)))
-        # hop_sample_data2 = anndata.read_h5ad(os.path.join(output_data_path, "hop_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, scale_factor, iteration2)))
-
-        kh_1x_data = anndata.read_h5ad(os.path.join(output_data_path, "kh_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, "1.0", iteration1)))
-        kh_1x_data2 = anndata.read_h5ad(os.path.join(output_data_path, "kh_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, "1.0", iteration2)))
-        kh_2x_data = anndata.read_h5ad(os.path.join(output_data_path, "kh_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, "2.0", iteration1)))
-        kh_2x_data2 = anndata.read_h5ad(os.path.join(output_data_path, "kh_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, "2.0", iteration2)))
-        kh_0_5x_data = anndata.read_h5ad(os.path.join(output_data_path, "kh_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, "0.5", iteration1)))
-        kh_0_5x_data2 = anndata.read_h5ad(os.path.join(output_data_path, "kh_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, "0.5", iteration2)))
-        kh_0_2x_data = anndata.read_h5ad(os.path.join(output_data_path, "kh_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, "0.2", iteration1)))
-        kh_0_2x_data2 = anndata.read_h5ad(os.path.join(output_data_path, "kh_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, "0.2", iteration2)))
-
-        for num_trials in range(30):
-            logging.info("Starting trial {}".format(num_trials+1))
-            kf5 = KFold(n_splits=5, shuffle=True)
-            fcs_files = kh_1x_data.obs.FCS_File.values.unique()
-
-            final_results = pd.DataFrame()
-            # for method in (1, 2):
-            for method in (2):
-                # for num_clusters in (15, 30, 50):
-                for num_clusters in (30):
-                    results = []
-                    print("Method = {}, # Clusters = {}".format(method, num_clusters))
-                    for i, (train_inds, test_inds) in enumerate(kf5.split(fcs_files)):
-                        # Splitting out train and test sample set fcs files
-                        train_sets, test_sets = fcs_files[train_inds], fcs_files[test_inds]
-                        ## IID
-                        km = KMeans(init="k-means++", n_clusters=num_clusters, n_init=10)
-                        iid_train_vec, iid_train_labels, iid_test_vec, iid_test_labels = get_classification_input(iid_sample_data, iid_sample_data2, train_sets, test_sets, km, num_clusters, method, is_iid=1)
-                        model, acc, cf_matrix = train_classifier(iid_train_vec, iid_train_labels, iid_test_vec, iid_test_labels, model_type='svm')
-                        results.append([i+1, "iid", acc])
-
-                        # KH
-                        kh_train_vec, kh_train_labels, kh_test_vec, kh_test_labels = get_classification_input(kh_sample_data, kh_sample_data2, train_sets, test_sets, km, num_clusters, method, is_iid=0)
-                        model, acc, cf_matrix = train_classifier(kh_train_vec, kh_train_labels, kh_test_vec, kh_test_labels, model_type='svm')
-                        results.append([i + 1, "kh", acc])
-
-                        # Geo
-                        geo_train_vec, geo_train_labels, geo_test_vec, geo_test_labels = get_classification_input(geo_sample_data, geo_sample_data2, train_sets, test_sets, km, num_clusters, method, is_iid=0)
-                        model, acc, cf_matrix = train_classifier(geo_train_vec, geo_train_labels, geo_test_vec, geo_test_labels, model_type='svm')
-                        results.append([i + 1, "geo", acc])
-
-                        # Hopper
-                        hop_train_vec, hop_train_labels, hop_test_vec, hop_test_labels = get_classification_input(hop_sample_data, hop_sample_data2, train_sets, test_sets, km, num_clusters, method, is_iid=0)
-                        model, acc, cf_matrix = train_classifier(hop_train_vec, hop_train_labels, hop_test_vec, hop_test_labels, model_type='svm')
-                        results.append([i + 1, "hop", acc])
-
-                    df = pd.DataFrame(results, columns=['Fold #', "subsampling", "Acc"])
-                    df2 = df.set_index(['Fold #', 'subsampling'])
-                    df_final = df2.groupby("subsampling").mean().reset_index()
-                    df_final['clusters'] = num_clusters
-                    df_final['method'] = method
-                    final_results = pd.concat((final_results, df_final))
-
-            logging.info("Finished for trial {}. Writing to file".format(num_trials+1))
-            classification_results_file = os.path.join(data_path, "classification_results_{}.csv".format(scale_factor))
-            if(os.path.isfile(classification_results_file)):
-                final_results.to_csv(classification_results_file, mode='a', header=None, index=False)
-            else:
-                final_results.to_csv(classification_results_file, index=False)
+    results_file = "loo_classification_results_kh_{}sketches_{}clusters.csv".format(num_sketches)
+    leave_one_out_validation(output_data_path, data_path, num_sketches, num_samples_per_set, results_file, num_clusters)
 
 
 gamma_0 = 2.5

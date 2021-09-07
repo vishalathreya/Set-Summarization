@@ -7,7 +7,7 @@ from geosketch import gs
 import sklearn
 from sklearn import metrics
 from sklearn.svm import SVC
-from sklearn.model_selection import GridSearchCV
+from sklearn.model_selection import GridSearchCV, train_test_split
 from sklearn.ensemble import RandomForestClassifier
 
 
@@ -132,13 +132,14 @@ def get_cluster_freq_vector(km, subsample_data, subsample_preds, num_clusters):
     return np.asarray(vec), np.asarray(sample_labels), sample_sets
 
 
-def get_classification_input(subsample_data, subsample_data2, train_sets, test_sets, km, num_clusters, method=1, is_iid=0):
+def get_classification_input(subsample_data, subsample_data2, train_sets, test_sets, num_clusters, km=None, method=1, is_iid=0):
     # subsample_train, subsample_test, subsample_train_X, subsample_train_Y, subsample_test_X, subsample_test_Y = get_subsample_train_test_data(subsample_data, train_sets, test_sets)
     _, _, subsample_train_cluster_X, _, _, _ = get_subsample_train_test_data(subsample_data, train_sets, test_sets)
     subsample_train, subsample_test, subsample_train_X, subsample_train_Y, subsample_test_X, subsample_test_Y = get_subsample_train_test_data(subsample_data2, train_sets, test_sets)
 
     if(method == 2):
-        km = KMeans(init="k-means++", n_clusters=num_clusters, n_init=10)
+        # Fit the KMeans on one sketch
+        km = KMeans(init="k-means++", n_clusters=num_clusters, n_init=5)
         # subsample_train_preds = km.fit_predict(subsample_train_X)
         subsample_train_preds = km.fit_predict(subsample_train_cluster_X)
     else:
@@ -149,6 +150,7 @@ def get_classification_input(subsample_data, subsample_data2, train_sets, test_s
         else:
             subsample_train_preds = km.predict(subsample_train_X)
 
+    # Use trained KMeans centers to predict on the other sketch
     subsample_train_preds = km.predict(subsample_train_X)
     subsample_test_preds = km.predict(subsample_test_X)
 
@@ -184,10 +186,31 @@ def train_classifier(xtrain, ytrain, xtest, ytest, model_type='svm'):
         model = RandomForestClassifier()
 
     grid = GridSearchCV(model, param_grid, n_jobs=-1)
-    # grid = RandomForestClassifier()
     grid.fit(xtrain, ytrain)
     preds = grid.predict(xtest)
     acc = metrics.accuracy_score(ytest, preds)
     cf_matrix = metrics.confusion_matrix(ytest, preds)
 
     return grid, acc, cf_matrix
+
+
+def leave_one_out_classifier(xtrain, ytrain, xtest, ytest, model_type='svm'):
+    if(model_type == 'svm'):
+        param_grid = {'C': [0.1, 1, 100, 1000], 'kernel': ['rbf', 'poly'],
+                  'degree': [3, 4, 6], 'gamma': [1, 0.1, 0.001, 0.0001]}
+        model = SVC()
+    elif(model_type == 'svm_linear'):
+        param_grid = {'C': [0.1, 1, 100, 1000], 'kernel': ['linear'], 'tol': [1e-5]}
+        model = SVC()
+    else:
+        param_grid = {'n_estimators': [200, 500, 1000, 5000]}
+        model = RandomForestClassifier()
+
+    # Using only 1 split for grid search CV
+    train_inds, test_inds = train_test_split(range(xtrain.shape[0]), test_size=0.2)
+    grid = GridSearchCV(model, param_grid, cv = [(train_inds, test_inds)], n_jobs=-1)
+    grid.fit(xtrain, ytrain)
+    best_estimator_score = grid.best_score_
+    ypred = grid.predict(xtest)
+
+    return grid, best_estimator_score, ypred
