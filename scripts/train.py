@@ -1,3 +1,5 @@
+import time
+
 import numpy as np
 import os
 import anndata
@@ -11,22 +13,23 @@ from sklearn.manifold import TSNE
 from sklearn.cluster import KMeans
 
 import pandas as pd
+from functools import partial
 
 from model import *
 
 
 def cross_validation(output_data_path, data_path, num_sketches, num_samples_per_set, results_file, scale_factor=None):
-    for iteration1, iteration2 in [(i ,j) for i in range(1 ,num_sketches+1) for j in range(1 ,num_sketches+1) if( i!=j)]:
-        print("Reading data for iteration1 = {}, iteration2 = {}".format(iteration1, iteration2))
-        kh_sample_data = anndata.read_h5ad(os.path.join(output_data_path, "kh_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, scale_factor, iteration1)))
-        iid_sample_data = anndata.read_h5ad(os.path.join(output_data_path, "iid_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, scale_factor, iteration1)))
-        geo_sample_data = anndata.read_h5ad(os.path.join(output_data_path, "geo_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, scale_factor, iteration1)))
-        hop_sample_data = anndata.read_h5ad(os.path.join(output_data_path, "hop_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, scale_factor, iteration1)))
+    for sketch1, sketch2 in [(i ,j) for i in range(1 ,num_sketches+1) for j in range(1 ,num_sketches+1) if( i!=j)]:
+        print("Reading data for sketch1 = {}, sketch2 = {}".format(sketch1, sketch2))
+        kh_sample_data = anndata.read_h5ad(os.path.join(output_data_path, "kh_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, scale_factor, sketch1)))
+        iid_sample_data = anndata.read_h5ad(os.path.join(output_data_path, "iid_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, scale_factor, sketch1)))
+        geo_sample_data = anndata.read_h5ad(os.path.join(output_data_path, "geo_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, scale_factor, sketch1)))
+        hop_sample_data = anndata.read_h5ad(os.path.join(output_data_path, "hop_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, scale_factor, sketch1)))
 
-        kh_sample_data2 = anndata.read_h5ad(os.path.join(output_data_path, "kh_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, scale_factor, iteration2)))
-        iid_sample_data2 = anndata.read_h5ad(os.path.join(output_data_path, "iid_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, scale_factor, iteration2)))
-        geo_sample_data2 = anndata.read_h5ad(os.path.join(output_data_path, "geo_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, scale_factor, iteration2)))
-        hop_sample_data2 = anndata.read_h5ad(os.path.join(output_data_path, "hop_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, scale_factor, iteration2)))
+        kh_sample_data2 = anndata.read_h5ad(os.path.join(output_data_path, "kh_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, scale_factor, sketch2)))
+        iid_sample_data2 = anndata.read_h5ad(os.path.join(output_data_path, "iid_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, scale_factor, sketch2)))
+        geo_sample_data2 = anndata.read_h5ad(os.path.join(output_data_path, "geo_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, scale_factor, sketch2)))
+        hop_sample_data2 = anndata.read_h5ad(os.path.join(output_data_path, "hop_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, scale_factor, sketch2)))
 
         for num_trials in range(30):
             print("Starting trial {}".format(num_trials +1))
@@ -35,6 +38,7 @@ def cross_validation(output_data_path, data_path, num_sketches, num_samples_per_
 
             final_results = pd.DataFrame()
             for method in (1, 2):
+            # for method in (2,):
                 for num_clusters in (15, 30, 50):
                     results = []
                     print("Method = {}, # Clusters = {}".format(method, num_clusters))
@@ -77,65 +81,184 @@ def cross_validation(output_data_path, data_path, num_sketches, num_samples_per_
                 final_results.to_csv(classification_results_file, index=False)
 
 
+def parallel_leaveoneout_kh_classification(test_set, num_clusters, kh_data):
+    """
+    Performs Leave-One-Out Classification and returns the ypred for test_set (For Kernel Herding subsamples)
+    :param test_set:
+    :param num_clusters:
+    :param kh_data:
+    :return:
+    """
+    print("{} process -: {}".format(current_process().pid, test_set))
 
-def leave_one_out_validation(output_data_path, data_path, num_sketches, num_samples_per_set, results_file, num_clusters):
-    for iteration1, iteration2 in [(i ,j) for i in range(1 ,num_sketches+1) for j in range(1 ,num_sketches+1) if( i!=j)]:
-        print("Reading data for iteration1 = {}, iteration2 = {}".format(iteration1, iteration2))
+    kh_1x_data, kh_1x_data2, kh_2x_data, kh_2x_data2, kh_0_5x_data, kh_0_5x_data2, kh_0_2x_data, kh_0_2x_data2 = kh_data
+    method = 2
+    fcs_files = list(kh_1x_data.obs.FCS_File.values.unique())
 
-        kh_1x_data = anndata.read_h5ad(os.path.join(output_data_path, "kh_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, "1.0", iteration1)))
-        kh_1x_data2 = anndata.read_h5ad(os.path.join(output_data_path, "kh_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, "1.0", iteration2)))
-        kh_2x_data = anndata.read_h5ad(os.path.join(output_data_path, "kh_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, "2.0", iteration1)))
-        kh_2x_data2 = anndata.read_h5ad(os.path.join(output_data_path, "kh_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, "2.0", iteration2)))
-        kh_0_5x_data = anndata.read_h5ad(os.path.join(output_data_path, "kh_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, "0.5", iteration1)))
-        kh_0_5x_data2 = anndata.read_h5ad(os.path.join(output_data_path, "kh_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, "0.5", iteration2)))
-        kh_0_2x_data = anndata.read_h5ad(os.path.join(output_data_path, "kh_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, "0.2", iteration1)))
-        kh_0_2x_data2 = anndata.read_h5ad(os.path.join(output_data_path, "kh_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, "0.2", iteration2)))
+    # Splitting out train and test sample set fcs files
+    train_sets = fcs_files[:]
+    train_sets.remove(test_set)
+    # KH
+    iteration_results = []
+    start = time.time()
+    kh_train_vec, kh_train_labels, kh_test_vec, kh_test_labels = get_classification_input(kh_1x_data, kh_1x_data2, train_sets, [test_set], num_clusters, method=method, is_iid=0)
+    t1 = time.time()
+    model, best_estimator_score, ypred = leave_one_out_classifier(kh_train_vec, kh_train_labels, kh_test_vec, kh_test_labels, model_type='svm')
+    iteration_results.append((best_estimator_score, ypred))
+    print("Time for get_classification_input = {}, Time for Classifier = {}".format(t1-start, time.time()-t1))
+    kh_train_vec, kh_train_labels, kh_test_vec, kh_test_labels = get_classification_input(kh_2x_data, kh_2x_data2, train_sets, [test_set], num_clusters, method=method, is_iid=0)
+    model, best_estimator_score, ypred = leave_one_out_classifier(kh_train_vec, kh_train_labels, kh_test_vec, kh_test_labels, model_type='svm')
+    iteration_results.append((best_estimator_score, ypred))
 
-        for num_trials in range(10):
+    kh_train_vec, kh_train_labels, kh_test_vec, kh_test_labels = get_classification_input(kh_0_5x_data, kh_0_5x_data2, train_sets, [test_set], num_clusters, method=method, is_iid=0)
+    model, best_estimator_score, ypred = leave_one_out_classifier(kh_train_vec, kh_train_labels, kh_test_vec, kh_test_labels, model_type='svm')
+    iteration_results.append((best_estimator_score, ypred))
+
+    kh_train_vec, kh_train_labels, kh_test_vec, kh_test_labels = get_classification_input(kh_0_2x_data, kh_0_2x_data2, train_sets, [test_set], num_clusters, method=method, is_iid=0)
+    model, best_estimator_score, ypred = leave_one_out_classifier(kh_train_vec, kh_train_labels, kh_test_vec, kh_test_labels, model_type='svm')
+    iteration_results.append((best_estimator_score, ypred))
+
+    # Prediction using Model with Best gamma and SVM hyperparams
+    best_model_ypred = max(iteration_results, key= lambda x: x[0])
+
+    # correct_pred_count = (np.asarray(total_ypred) == np.asarray(total_ytest)).sum()
+    print("Finished {} in {} secs. Pred = {}, True = {}".format(test_set, time.time()-start, best_model_ypred[1], kh_test_labels))
+
+    return best_model_ypred[1] == kh_test_labels    # Prediction == GT
+
+
+def parallel_leaveoneout_others_classification(test_set, num_clusters, data):
+    """
+    Performs Leave-One-Out Classification and returns the ypred for test_set (For Geo, IID & Hopper subsamples)
+    :param test_set:
+    :param num_clusters:
+    :param kh_data:
+    :return:
+    """
+    print("{} process -: {}".format(current_process().pid, test_set))
+
+    iid_data, iid_data2, geo_data, geo_data2, hop_data, hop_data2 = data
+    method = 2
+    fcs_files = list(iid_data.obs.FCS_File.values.unique())
+
+    # Splitting out train and test sample set fcs files
+    train_sets = fcs_files[:]
+    train_sets.remove(test_set)
+    # KH
+    iteration_results = []
+    start = time.time()
+    
+    # IID
+    iid_train_vec, iid_train_labels, iid_test_vec, iid_test_labels = get_classification_input(iid_data, iid_data2, train_sets, [test_set], num_clusters, method=method, is_iid=0)
+    t1 = time.time()
+    model, best_estimator_score, ypred = leave_one_out_classifier(iid_train_vec, iid_train_labels, iid_test_vec, iid_test_labels, model_type='svm')
+    iteration_results.append(ypred == iid_test_labels)
+    print("Time for get_classification_input = {}, Time for Classifier = {}".format(t1-start, time.time()-t1))
+
+    # Geo
+    geo_train_vec, geo_train_labels, geo_test_vec, geo_test_labels = get_classification_input(geo_data, geo_data2, train_sets, [test_set], num_clusters, method=method, is_iid=0)
+    model, best_estimator_score, ypred = leave_one_out_classifier(geo_train_vec, geo_train_labels, geo_test_vec, geo_test_labels, model_type='svm')
+    iteration_results.append(ypred == geo_test_labels)
+
+    # Hopper
+    hop_train_vec, hop_train_labels, hop_test_vec, hop_test_labels = get_classification_input(hop_data, hop_data2, train_sets, [test_set], num_clusters, method=method, is_iid=0)
+    model, best_estimator_score, ypred = leave_one_out_classifier(hop_train_vec, hop_train_labels, hop_test_vec, hop_test_labels, model_type='svm')
+    iteration_results.append(ypred == hop_test_labels)
+
+    print("Finished {} in {} secs.".format(test_set, time.time()-start))
+
+    return iteration_results
+
+
+def leave_one_out_kh_validation(output_data_path, data_path, num_sketches, num_samples_per_set, num_processes, results_file, num_clusters):
+    pool = Pool(processes=num_processes)
+    for sketch1, sketch2 in [(i, j) for i in range(2, num_sketches+1) for j in range(2, num_sketches+1) if(i != j)]:
+    # for sketch1, sketch2 in [(1,3), (2,1), (3,1), (3,2)]:
+        print("Reading data for sketch1 = {}, sketch2 = {}".format(sketch1, sketch2))
+
+        # Load sketches 1&2 for each gamma value
+        kh_1x_data = anndata.read_h5ad(os.path.join(output_data_path, "kh_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, "1.0", sketch1)))
+        kh_1x_data2 = anndata.read_h5ad(os.path.join(output_data_path, "kh_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, "1.0", sketch2)))
+        kh_2x_data = anndata.read_h5ad(os.path.join(output_data_path, "kh_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, "2.0", sketch1)))
+        kh_2x_data2 = anndata.read_h5ad(os.path.join(output_data_path, "kh_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, "2.0", sketch2)))
+        kh_0_5x_data = anndata.read_h5ad(os.path.join(output_data_path, "kh_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, "0.5", sketch1)))
+        kh_0_5x_data2 = anndata.read_h5ad(os.path.join(output_data_path, "kh_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, "0.5", sketch2)))
+        kh_0_2x_data = anndata.read_h5ad(os.path.join(output_data_path, "kh_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, "0.2", sketch1)))
+        kh_0_2x_data2 = anndata.read_h5ad(os.path.join(output_data_path, "kh_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, "0.2", sketch2)))
+
+        # Re-run N times
+        for num_trials in range(5):
+            start = time.time()
             print("Starting trial {}".format(num_trials + 1))
             fcs_files = list(kh_1x_data.obs.FCS_File.values.unique())
-            total_ypred = []
-            total_ytest = []
-            method = 2
 
             results = []
-            print("Method = {}, # Clusters = {}".format(method, num_clusters))
 
-            for ind, test_set in enumerate(fcs_files):
-                # Splitting out train and test sample set fcs files
-                train_sets = fcs_files[:]
-                train_sets.remove(test_set)
-                # KH
-                iteration_results = []
-                kh_train_vec, kh_train_labels, kh_test_vec, kh_test_labels = get_classification_input(kh_1x_data, kh_1x_data2, train_sets, [test_set], num_clusters, method=method, is_iid=0)
-                model, best_estimator_score, ypred = leave_one_out_classifier(kh_train_vec, kh_train_labels, kh_test_vec, kh_test_labels, model_type='svm')
-                iteration_results.append((best_estimator_score, ypred))
+            pool_results = pool.map(partial(parallel_leaveoneout_kh_classification, num_clusters=num_clusters, kh_data=(kh_1x_data, kh_1x_data2, kh_2x_data, kh_2x_data2, kh_0_5x_data, kh_0_5x_data2, kh_0_2x_data, kh_0_2x_data2)), fcs_files, chunksize=len(fcs_files)//num_processes)
+            print(pool_results)
+            # Aggregate the results from each of the workers
+            acc = sum(pool_results) / len(fcs_files)
 
-                kh_train_vec, kh_train_labels, kh_test_vec, kh_test_labels = get_classification_input(kh_2x_data, kh_2x_data2, train_sets, [test_set], num_clusters, method=method, is_iid=0)
-                model, best_estimator_score, ypred = leave_one_out_classifier(kh_train_vec, kh_train_labels, kh_test_vec, kh_test_labels, model_type='svm')
-                iteration_results.append((best_estimator_score, ypred))
-
-                kh_train_vec, kh_train_labels, kh_test_vec, kh_test_labels = get_classification_input(kh_0_5x_data, kh_0_5x_data2, train_sets, [test_set], num_clusters, method=method, is_iid=0)
-                model, best_estimator_score, ypred = leave_one_out_classifier(kh_train_vec, kh_train_labels, kh_test_vec, kh_test_labels, model_type='svm')
-                iteration_results.append((best_estimator_score, ypred))
-
-                kh_train_vec, kh_train_labels, kh_test_vec, kh_test_labels = get_classification_input(kh_0_2x_data, kh_0_2x_data2, train_sets, [test_set], num_clusters, method=method, is_iid=0)
-                model, best_estimator_score, ypred = leave_one_out_classifier(kh_train_vec, kh_train_labels, kh_test_vec, kh_test_labels, model_type='svm')
-                iteration_results.append((best_estimator_score, ypred))
-
-                # Prediction using Model with Best gamma and SVM hyperparams
-                best_model_ypred = max(iteration_results, key= lambda x: x[0])
-                total_ypred.append(best_model_ypred[1])
-                total_ytest.append(kh_test_labels)
-                print("Finished for test set = {}".format(ind))
-
-            acc = (np.asarray(total_ypred) == np.asarray(total_ytest)).sum() / len(fcs_files)
-            results.append([iteration1, iteration2, num_trials+1, "kh", acc])
+            results.append([sketch1, sketch2, num_trials + 1, "kh", acc])
             final_results = pd.DataFrame(results, columns=["Sketch1", "Sketch2", "Trial #", "Method", "Acc"])
-            print("Finished for trial {}. Writing to file".format(num_trials+1))
+            print("Finished for trial {}. Writing to file".format(num_trials + 1))
             classification_results_file = os.path.join(data_path, results_file)
             if(os.path.isfile(classification_results_file)):
                 final_results.to_csv(classification_results_file, mode='a', header=None, index=False)
             else:
                 final_results.to_csv(classification_results_file, index=False)
+
+            print("Time taken for trial {} = {} secs".format(num_trials, time.time()-start))
+
+    pool.close()
+    pool.join()
+    pool.terminate()
+    
+    
+def leave_one_out_others_validation(output_data_path, data_path, num_sketches, num_samples_per_set, num_processes, results_file, num_clusters):
+    pool = Pool(processes=num_processes)
+    for sketch1, sketch2 in [(i, j) for i in range(1, num_sketches+1) for j in range(1, num_sketches+1) if(i != j)]:
+        print("Reading data for sketch1 = {}, sketch2 = {}".format(sketch1, sketch2))
+
+        # Load sketches 1&2 for each of the methods
+        iid_data = anndata.read_h5ad(os.path.join(output_data_path, "iid_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, 1.0, sketch1)))
+        geo_data = anndata.read_h5ad(os.path.join(output_data_path, "geo_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, 1.0, sketch1)))
+        hop_data = anndata.read_h5ad(os.path.join(output_data_path, "hop_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, 1.0, sketch1)))
+
+        iid_data2 = anndata.read_h5ad(os.path.join(output_data_path, "iid_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, 1.0, sketch2)))
+        geo_data2 = anndata.read_h5ad(os.path.join(output_data_path, "geo_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, 1.0, sketch2)))
+        hop_data2 = anndata.read_h5ad(os.path.join(output_data_path, "hop_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, 1.0, sketch2)))
+
+
+        # Re-run N times
+        for num_trials in range(5):
+            start = time.time()
+            print("Starting trial {}".format(num_trials + 1))
+            fcs_files = list(iid_data.obs.FCS_File.values.unique())
+
+            results = []
+
+            pool_results = pool.map(partial(parallel_leaveoneout_others_classification, num_clusters=num_clusters, data=(iid_data, iid_data2, geo_data, geo_data2, hop_data, hop_data2)), fcs_files, chunksize=len(fcs_files)//num_processes)
+            print(pool_results)
+            # Aggregate the results from each of the workers
+            pool_results = np.asarray(pool_results)
+            print(pool_results.shape, len(fcs_files))
+            acc = np.sum(pool_results, axis=0) / len(fcs_files)
+
+            results.append([sketch1, sketch2, num_trials + 1, "iid", acc[0]])
+            results.append([sketch1, sketch2, num_trials + 1, "geo", acc[1]])
+            results.append([sketch1, sketch2, num_trials + 1, "hop", acc[2]])
+            final_results = pd.DataFrame(results, columns=["Sketch1", "Sketch2", "Trial #", "Method", "Acc"])
+            print("Finished for trial {}. Writing to file".format(num_trials + 1))
+            classification_results_file = os.path.join(data_path, results_file)
+            if(os.path.isfile(classification_results_file)):
+                final_results.to_csv(classification_results_file, mode='a', header=None, index=False)
+            else:
+                final_results.to_csv(classification_results_file, index=False)
+
+            print("Time taken for trial {} = {} secs".format(num_trials, time.time()-start))
+
+    pool.close()
+    pool.join()
+    pool.terminate()
 

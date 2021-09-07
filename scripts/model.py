@@ -133,6 +133,19 @@ def get_cluster_freq_vector(km, subsample_data, subsample_preds, num_clusters):
 
 
 def get_classification_input(subsample_data, subsample_data2, train_sets, test_sets, num_clusters, km=None, method=1, is_iid=0):
+    """
+    Represents each sample set as a cluster frequency vector using KMeans
+    :param subsample_data: Train Kmeans on this
+    :param subsample_data2: Use Kmeans centers to predict on this
+    :param train_sets:
+    :param test_sets:
+    :param num_clusters:
+    :param km:
+    :param method:
+    :param is_iid:
+    :return:
+    """
+
     # subsample_train, subsample_test, subsample_train_X, subsample_train_Y, subsample_test_X, subsample_test_Y = get_subsample_train_test_data(subsample_data, train_sets, test_sets)
     _, _, subsample_train_cluster_X, _, _, _ = get_subsample_train_test_data(subsample_data, train_sets, test_sets)
     subsample_train, subsample_test, subsample_train_X, subsample_train_Y, subsample_test_X, subsample_test_Y = get_subsample_train_test_data(subsample_data2, train_sets, test_sets)
@@ -154,6 +167,7 @@ def get_classification_input(subsample_data, subsample_data2, train_sets, test_s
     subsample_train_preds = km.predict(subsample_train_X)
     subsample_test_preds = km.predict(subsample_test_X)
 
+    # Compute the cluster frequency vector
     subsample_train_vec, subsample_train_labels, subsample_train_sample_sets = get_cluster_freq_vector(km, subsample_train, subsample_train_preds, num_clusters=km.cluster_centers_.shape[0])
     subsample_test_vec, subsample_test_labels, subsample_test_sample_sets = get_cluster_freq_vector(km, subsample_test, subsample_test_preds, num_clusters=km.cluster_centers_.shape[0])
 
@@ -208,8 +222,9 @@ def leave_one_out_classifier(xtrain, ytrain, xtest, ytest, model_type='svm'):
 
     # Using only 1 split for grid search CV
     train_inds, test_inds = train_test_split(range(xtrain.shape[0]), test_size=0.2)
-    grid = GridSearchCV(model, param_grid, cv = [(train_inds, test_inds)], n_jobs=-1)
+    grid = GridSearchCV(model, param_grid, cv=[(train_inds, test_inds)])
     grid.fit(xtrain, ytrain)
+    # The score using the best hyperparam combination. Used to compare with the scores coming from data using other gamma values
     best_estimator_score = grid.best_score_
     ypred = grid.predict(xtest)
 
