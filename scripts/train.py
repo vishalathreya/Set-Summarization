@@ -104,19 +104,19 @@ def parallel_leaveoneout_kh_classification(test_set, num_clusters, kh_data):
     kh_train_vec, kh_train_labels, kh_test_vec, kh_test_labels = get_classification_input(kh_1x_data, kh_1x_data2, train_sets, [test_set], num_clusters, method=method, is_iid=0)
     t1 = time.time()
     model, best_estimator_score, ypred = leave_one_out_classifier(kh_train_vec, kh_train_labels, kh_test_vec, kh_test_labels, model_type='svm')
-    iteration_results.append((best_estimator_score, ypred))
+    iteration_results.append((best_estimator_score, ypred, 1))
     print("Time for get_classification_input = {}, Time for Classifier = {}".format(t1-start, time.time()-t1))
     kh_train_vec, kh_train_labels, kh_test_vec, kh_test_labels = get_classification_input(kh_2x_data, kh_2x_data2, train_sets, [test_set], num_clusters, method=method, is_iid=0)
     model, best_estimator_score, ypred = leave_one_out_classifier(kh_train_vec, kh_train_labels, kh_test_vec, kh_test_labels, model_type='svm')
-    iteration_results.append((best_estimator_score, ypred))
+    iteration_results.append((best_estimator_score, ypred, 2))
 
     kh_train_vec, kh_train_labels, kh_test_vec, kh_test_labels = get_classification_input(kh_0_5x_data, kh_0_5x_data2, train_sets, [test_set], num_clusters, method=method, is_iid=0)
     model, best_estimator_score, ypred = leave_one_out_classifier(kh_train_vec, kh_train_labels, kh_test_vec, kh_test_labels, model_type='svm')
-    iteration_results.append((best_estimator_score, ypred))
+    iteration_results.append((best_estimator_score, ypred, 3))
 
     kh_train_vec, kh_train_labels, kh_test_vec, kh_test_labels = get_classification_input(kh_0_2x_data, kh_0_2x_data2, train_sets, [test_set], num_clusters, method=method, is_iid=0)
     model, best_estimator_score, ypred = leave_one_out_classifier(kh_train_vec, kh_train_labels, kh_test_vec, kh_test_labels, model_type='svm')
-    iteration_results.append((best_estimator_score, ypred))
+    iteration_results.append((best_estimator_score, ypred, 4))
 
     # Prediction using Model with Best gamma and SVM hyperparams
     best_model_ypred = max(iteration_results, key= lambda x: x[0])
@@ -124,7 +124,7 @@ def parallel_leaveoneout_kh_classification(test_set, num_clusters, kh_data):
     # correct_pred_count = (np.asarray(total_ypred) == np.asarray(total_ytest)).sum()
     print("Finished {} in {} secs. Pred = {}, True = {}".format(test_set, time.time()-start, best_model_ypred[1], kh_test_labels))
 
-    return best_model_ypred[1] == kh_test_labels    # Prediction == GT
+    return best_model_ypred[1] == kh_test_labels, best_model_ypred[2], best_model_ypred[1]   # Prediction == GT, Gamma indicator to calculate pick rate, ypred
 
 
 def parallel_leaveoneout_others_classification(test_set, num_clusters, data):
@@ -172,8 +172,8 @@ def parallel_leaveoneout_others_classification(test_set, num_clusters, data):
 
 def leave_one_out_kh_validation(output_data_path, data_path, num_sketches, num_samples_per_set, num_processes, results_file, num_clusters):
     pool = Pool(processes=num_processes)
-    for sketch1, sketch2 in [(i, j) for i in range(2, num_sketches+1) for j in range(2, num_sketches+1) if(i != j)]:
-    # for sketch1, sketch2 in [(1,3), (2,1), (3,1), (3,2)]:
+    for sketch1, sketch2 in [(i, j) for i in range(1, num_sketches+1) for j in range(1, num_sketches+1) if(i != j)]:
+    # for sketch1, sketch2 in [(1,3),]:
         print("Reading data for sketch1 = {}, sketch2 = {}".format(sketch1, sketch2))
 
         # Load sketches 1&2 for each gamma value
@@ -196,11 +196,16 @@ def leave_one_out_kh_validation(output_data_path, data_path, num_sketches, num_s
 
             pool_results = pool.map(partial(parallel_leaveoneout_kh_classification, num_clusters=num_clusters, kh_data=(kh_1x_data, kh_1x_data2, kh_2x_data, kh_2x_data2, kh_0_5x_data, kh_0_5x_data2, kh_0_2x_data, kh_0_2x_data2)), fcs_files, chunksize=len(fcs_files)//num_processes)
             print(pool_results)
+            pool_results = [(i[0][0], i[1], i[2][0]) for i in pool_results]
+            pool_results = np.asarray(pool_results)
             # Aggregate the results from each of the workers
-            acc = sum(pool_results) / len(fcs_files)
+            acc = np.sum(pool_results[:, 0]) / len(fcs_files)                                           # Classification accuracy
+            gamma_pick_rate = np.bincount(pool_results[:, 1], minlength=5)[1:] / len(fcs_files)         # Gamma Pick Rate
+            ypred_positive_count = np.sum(pool_results[:, 2])                                           # Positive ypred Count (ypred == 1)
+            print(gamma_pick_rate)
 
-            results.append([sketch1, sketch2, num_trials + 1, "kh", acc])
-            final_results = pd.DataFrame(results, columns=["Sketch1", "Sketch2", "Trial #", "Method", "Acc"])
+            results.append([sketch1, sketch2, num_trials + 1, "kh", acc, gamma_pick_rate, ypred_positive_count])
+            final_results = pd.DataFrame(results, columns=["Sketch1", "Sketch2", "Trial #", "Method", "Acc", "Gamma Pick Rate", "ypred +ve Count"])
             print("Finished for trial {}. Writing to file".format(num_trials + 1))
             classification_results_file = os.path.join(data_path, results_file)
             if(os.path.isfile(classification_results_file)):

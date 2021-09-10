@@ -98,9 +98,9 @@ def get_cluster_freq_vector(km, subsample_data, subsample_preds, num_clusters):
              get_cluster_freq_vector(km, kh_sample_test, kh_sample_test_preds, num_clusters=30)
 
     :param km: trained KMeans model
-    :param subsample_data: the AnnData of the subset method data
-    :param subsample_preds: predicted cluster IDs using km of each point in subsample_data
-    :param num_clusters: number of clusters in km
+    :param subsample_data: the AnnData of the subsamples
+    :param subsample_preds: predicted cluster IDs of each point in subsample_data
+    :param num_clusters: KMeans clusters
     :return: (num_sample_set X num_clusters) cluster freq vec, (num_sample_set, ) sample set labels, sample_sets used
     """
     cluster_sizes = dict([(i, (subsample_preds == i).sum()) for i in range(num_clusters)])
@@ -152,7 +152,7 @@ def get_classification_input(subsample_data, subsample_data2, train_sets, test_s
 
     if(method == 2):
         # Fit the KMeans on one sketch
-        km = KMeans(init="k-means++", n_clusters=num_clusters, n_init=5)
+        km = KMeans(init="k-means++", n_clusters=num_clusters, n_init=10)
         # subsample_train_preds = km.fit_predict(subsample_train_X)
         subsample_train_preds = km.fit_predict(subsample_train_cluster_X)
     else:

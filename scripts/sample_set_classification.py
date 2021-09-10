@@ -201,7 +201,7 @@ if(proc == 'merge'):
 if(proc == 'classify'):
     # KFold -> clustering -> cluster_freq vector -> classifier
     num_sketches = 3
-    num_clusters = 30
+    num_clusters = 50
     output_data_path = "/playpen-ssd/athreya/set_summarization/data/hvtn/loo_data"
     # results_file = "classification_results_{}.csv".format(scale_factor)
     # cross_validation(output_data_path, data_path, num_sketches, num_samples_per_set, results_file, scale_factor)
