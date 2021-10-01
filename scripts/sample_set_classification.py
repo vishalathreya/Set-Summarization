@@ -34,8 +34,8 @@ def preprocess_input(input_data):
     # Creating label column from Sample Treatment
     req_hvtn_data.obs['label'] = req_hvtn_data.obs.Sample_Treatment.apply(lambda x: 1 if "GAG" in x else 0)
     # Transform using arcsinh
-    # req_hvtn_data.X = np.arcsinh((1. / 5) * req_hvtn_data.X)
-    req_hvtn_data.X = StandardScaler().fit_transform(req_hvtn_data.X)
+    req_hvtn_data.X = np.arcsinh((1. / 5) * req_hvtn_data.X)
+    # req_hvtn_data.X = StandardScaler().fit_transform(req_hvtn_data.X)
 
     return req_hvtn_data
 
@@ -150,27 +150,34 @@ def parallel_subsampling(fcs_filename):
 
 
 
-data_path = "/home/athreya/private/set_summarization/data/"
-output_data_path = "/playpen-ssd/athreya/set_summarization/data/hvtn"
-# data_path = "/home/athreya/private/set_summarization/data/preeclampsia"
+
 num_samples_per_set = 500
 
 if(proc == 'subsample'):
-    # Main
+    # Preprocess HVTN data
     # input_data = anndata.read_h5ad(data_path + "hvtn.h5ad")
     # standard_data = preprocess_input(input_data)
+    # standard_data.write(os.path.join(data_path, "hvtn_preprocessed.h5ad"))
 
-    # data = anndata.read_h5ad(os.path.join(data_path, "preeclampsia_preprocessed.h5ad"))
-    data = anndata.read_h5ad(os.path.join(data_path, "hvtn_preprocessed.h5ad"))
+    # output_data_path = "/playpen-ssd/athreya/set_summarization/data/hvtn"
+    output_data_path = "/playpen-ssd/athreya/set_summarization/data/preeclampsia"
+
+    data_path = "/home/athreya/private/set_summarization/data/"
+
+    data = anndata.read_h5ad(os.path.join(data_path, "preeclampsia_preprocessed.h5ad"))
+    # data = anndata.read_h5ad(os.path.join(data_path, "hvtn_preprocessed.h5ad"))
+
     print("Finished reading preprocessed data. Starting {} pools".format(num_processes))
+
     # KH subsampling
     fcs_file = data.obs.FCS_File.values.unique()[start:end]
+    # fcs_file = data.obs.FCS_File.values.unique()[[33, 24, 32, 25, 30, 7]]         # Run for specific sample sets in case proc failed in between
 
     lock = Lock()
 
     # Overwrite finished sample sets info from previous run with Current Run params
     with open(os.path.join(output_data_path, "finished_sets.txt"), 'w') as f:
-        f.write("Finished Sets for Scale Factor = {}, Iteration = {} -:".format(scale_factor, iteration))
+        f.write("Finished Sets for Scale Factor = {}, Iteration = {} -:\n".format(scale_factor, iteration))
 
     pool = Pool(processes=num_processes)
     pool.map(parallel_subsampling, fcs_file)
@@ -178,6 +185,10 @@ if(proc == 'subsample'):
 
 
 if(proc == 'merge'):
+
+    # output_data_path = "/playpen-ssd/athreya/set_summarization/data/hvtn"
+    output_data_path = "/playpen-ssd/athreya/set_summarization/data/preeclampsia"
+
     import shutil
     for method in ["iid", "kh", "hop", "geo"]:
         folder_path = os.path.join(output_data_path, "{}_samples".format(method))
@@ -185,6 +196,7 @@ if(proc == 'merge'):
 
         # Merge original subsample anndata
         output_file_name = "{}_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(method, num_samples_per_set / 1000, scale_factor, iteration)
+        print("Merging into {}".format(output_file_name))
         utils.merge_anndata(folder_path, file_regex, output_file_name)
         shutil.move(os.path.join(folder_path, output_file_name), os.path.join(output_data_path, output_file_name))
 
@@ -201,12 +213,20 @@ if(proc == 'merge'):
 if(proc == 'classify'):
     # KFold -> clustering -> cluster_freq vector -> classifier
     num_sketches = 3
-    num_clusters = 50
-    output_data_path = "/playpen-ssd/athreya/set_summarization/data/hvtn/loo_data"
-    # results_file = "classification_results_{}.csv".format(scale_factor)
+
+    # data_path = "/playpen-ssd/athreya/set_summarization/data/hvtn"
+    data_path = "/playpen-ssd/athreya/set_summarization/data/preeclampsia"
+
+    # output_data_path = "/playpen-ssd/athreya/set_summarization/data/hvtn/old_data"
+    # output_data_path = "/playpen-ssd/athreya/set_summarization/data/preeclampsia/loo_data"
+    # results_file = "5fold_cv_classification_results_{}.csv".format(scale_factor)
     # cross_validation(output_data_path, data_path, num_sketches, num_samples_per_set, results_file, scale_factor)
 
     # KH Leave One Out
+    num_clusters = 30
+
+    # output_data_path = "/playpen-ssd/athreya/set_summarization/data/hvtn/loo_data"
+    output_data_path = "/playpen-ssd/athreya/set_summarization/data/preeclampsia/loo_data"
     results_file = "loo_classification_results_kh_{}sketches_{}clusters.csv".format(num_sketches, num_clusters)
     leave_one_out_kh_validation(output_data_path, data_path, num_sketches, num_samples_per_set, num_processes, results_file, num_clusters)
 

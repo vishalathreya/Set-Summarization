@@ -10,6 +10,8 @@ from sklearn.svm import SVC
 from sklearn.model_selection import GridSearchCV, train_test_split
 from sklearn.ensemble import RandomForestClassifier
 
+import anndata
+
 
 
 def random_feats(X, gamma=6, frequency_seed=None):
@@ -103,7 +105,6 @@ def get_cluster_freq_vector(km, subsample_data, subsample_preds, num_clusters):
     :param num_clusters: KMeans clusters
     :return: (num_sample_set X num_clusters) cluster freq vec, (num_sample_set, ) sample set labels, sample_sets used
     """
-    cluster_sizes = dict([(i, (subsample_preds == i).sum()) for i in range(num_clusters)])
     try:
         # For NK Cell data
         fcs_filename_key = "fcs_filename"
@@ -114,20 +115,19 @@ def get_cluster_freq_vector(km, subsample_data, subsample_preds, num_clusters):
         sample_sets = subsample_data.obs[fcs_filename_key].unique()
     vec = []
     sample_labels = []
-    for sample in sample_sets:
-        sample_x = subsample_data[subsample_data.obs[fcs_filename_key] == sample, :]
-        sample_label = subsample_data[subsample_data.obs[fcs_filename_key] == sample].obs.label.unique()[0]
-        sample_preds = km.predict(sample_x.X)       # Predicting again to get cluster ID of this sample set's points (same as filtering from subsample_preds)
+    for sample_set_name in sample_sets:
+        sample_set = subsample_data[subsample_data.obs[fcs_filename_key] == sample_set_name, :]
+        sample_set_label = subsample_data[subsample_data.obs[fcs_filename_key] == sample_set_name].obs.label.unique()[0]
+        sample_set_preds = km.predict(sample_set.X)       # Predicting again to get cluster ID of this sample set's points (same as filtering from subsample_preds)
         sample_freq = []
+        print("sample set shape = {}, label = {}".format(sample_set.shape, sample_set_label))
         for i in range(num_clusters):
-            if(cluster_sizes[i] != 0):
-                sample_freq.append((sample_preds == i).sum() / cluster_sizes[i])
-            else:
-                # print("Cluster size = 0 for cluster {}, size = {}, (sample_preds==i).sum() = {}".format(i, cluster_sizes[i], (sample_preds == i).sum()))
-                sample_freq.append(0)
-
+            # Fraction of its samples clustered into cluster index "i"
+            print("cluster index = {}, # samples assigned = {}, % assigned = {}".format(i, (sample_set_preds == i).sum(), (sample_set_preds == i).sum() / sample_set.shape[0]))
+            sample_freq.append((sample_set_preds == i).sum() / sample_set.shape[0])
+        # print("Sample set frequency of {} = {}".format(sample_set_name, np.asarray(sample_freq).sum()))
         # Append sample set label
-        sample_labels.append(sample_label)
+        sample_labels.append(sample_set_label)
         vec.append(sample_freq)
     return np.asarray(vec), np.asarray(sample_labels), sample_sets
 
@@ -174,17 +174,14 @@ def get_classification_input(subsample_data, subsample_data2, train_sets, test_s
     return subsample_train_vec, subsample_train_labels, subsample_test_vec, subsample_test_labels
 
 
-def get_cluster_centers(subsample_data, train_sets, test_sets, num_clusters=15, method=2):
+def get_cluster_centers(subsample_data, train_sets, test_sets, num_clusters=15):
     """
     Getting KMeans cluster centers. Trying to run it multiple times to see if they vary with each run by comparing them on TSNE plots
     """
     subsample_train, subsample_test, subsample_train_X, subsample_train_Y, subsample_test_X, subsample_test_Y = get_subsample_train_test_data(subsample_data, train_sets, test_sets)
-    if (method == 2):
-        km = KMeans(init="k-means++", n_clusters=num_clusters, n_init=10)
-        subsample_train_preds = km.fit_predict(subsample_train_X)
-        return km.cluster_centers_
-    else:
-        print("Method != 2. Cannot run. Exiting...")
+    km = KMeans(init="k-means++", n_clusters=num_clusters, n_init=10)
+    subsample_train_preds = km.fit_predict(subsample_train_X)
+    return km.cluster_centers_
 
 
 def train_classifier(xtrain, ytrain, xtest, ytest, model_type='svm'):
