@@ -132,8 +132,8 @@ def parallel_leaveoneout_kh_classification(test_set, num_clusters, kh_data):
 def leave_one_out_kh_validation(output_data_path, data_path, num_sketches, num_samples_per_set, num_processes, results_file, num_clusters):
     print("Starting LOO validation for Kernel Herding sketches using {} processes and {} KMeans clusters".format(num_processes, num_clusters))
     pool = Pool(processes=num_processes)
-    # for sketch1, sketch2 in [(i, j) for i in range(1, num_sketches+1) for j in range(1, num_sketches+1) if(i != j)]:
-    for sketch1, sketch2 in [(1,2),]:
+    for sketch1, sketch2 in [(i, j) for i in range(1, num_sketches+1) for j in range(1, num_sketches+1) if(i != j)]:
+    # for sketch1, sketch2 in [(1,2),]:
         print("Reading data for sketch1 = {}, sketch2 = {}".format(sketch1, sketch2))
 
         # Load sketches 1&2 for each gamma value
@@ -233,8 +233,8 @@ def parallel_leaveoneout_others_classification(test_set, num_clusters, data):
 def leave_one_out_others_validation(output_data_path, data_path, num_sketches, num_samples_per_set, num_processes, results_file, num_clusters):
     print("Starting LOO validation for IID, Geo, Hopper and KH (only 1 gamma) sketches using {} processes and {} KMeans clusters".format(num_processes, num_clusters))
     pool = Pool(processes=num_processes)
-    # for sketch1, sketch2 in [(i, j) for i in range(1, num_sketches+1) for j in range(1, num_sketches+1) if(i != j)]:
-    for sketch1, sketch2 in [(1,2), (2,1)]:
+    for sketch1, sketch2 in [(i, j) for i in range(1, num_sketches+1) for j in range(1, num_sketches+1) if(i != j)]:
+    # for sketch1, sketch2 in [(1,2), (2,1)]:
         print("Reading data for sketch1 = {}, sketch2 = {}".format(sketch1, sketch2))
 
         # Load sketches 1&2 for each of the methods

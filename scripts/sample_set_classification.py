@@ -160,12 +160,14 @@ if(proc == 'subsample'):
     # standard_data.write(os.path.join(data_path, "hvtn_preprocessed.h5ad"))
 
     # output_data_path = "/playpen-ssd/athreya/set_summarization/data/hvtn"
-    output_data_path = "/playpen-ssd/athreya/set_summarization/data/preeclampsia"
+    # output_data_path = "/playpen-ssd/athreya/set_summarization/data/preeclampsia"
+    output_data_path = "/playpen-ssd/athreya/set_summarization/data/nk"
 
     data_path = "/home/athreya/private/set_summarization/data/"
 
-    data = anndata.read_h5ad(os.path.join(data_path, "preeclampsia_preprocessed.h5ad"))
     # data = anndata.read_h5ad(os.path.join(data_path, "hvtn_preprocessed.h5ad"))
+    # data = anndata.read_h5ad(os.path.join(data_path, "preeclampsia_preprocessed.h5ad"))
+    data = anndata.read_h5ad(os.path.join(data_path, "nk_cell_preprocessed.h5ad"))
 
     print("Finished reading preprocessed data. Starting {} pools".format(num_processes))
 
@@ -187,7 +189,8 @@ if(proc == 'subsample'):
 if(proc == 'merge'):
 
     # output_data_path = "/playpen-ssd/athreya/set_summarization/data/hvtn"
-    output_data_path = "/playpen-ssd/athreya/set_summarization/data/preeclampsia"
+    # output_data_path = "/playpen-ssd/athreya/set_summarization/data/preeclampsia"
+    output_data_path = "/playpen-ssd/athreya/set_summarization/data/nk"
 
     import shutil
     for method in ["iid", "kh", "hop", "geo"]:
@@ -215,24 +218,29 @@ if(proc == 'classify'):
     num_sketches = 3
 
     # data_path = "/playpen-ssd/athreya/set_summarization/data/hvtn"
-    data_path = "/playpen-ssd/athreya/set_summarization/data/preeclampsia"
+    # data_path = "/playpen-ssd/athreya/set_summarization/data/preeclampsia"
+    data_path = "/playpen-ssd/athreya/set_summarization/data/nk"
 
     # output_data_path = "/playpen-ssd/athreya/set_summarization/data/hvtn/old_data"
     # output_data_path = "/playpen-ssd/athreya/set_summarization/data/preeclampsia/loo_data"
-    # results_file = "5fold_cv_classification_results_{}.csv".format(scale_factor)
-    # cross_validation(output_data_path, data_path, num_sketches, num_samples_per_set, results_file, scale_factor)
+    output_data_path = "/playpen-ssd/athreya/set_summarization/data/nk/loo_data"
+
+    results_file = "5fold_cv_classification_results_{}subsamples_{}.csv".format(num_samples_per_set, scale_factor)
+    cross_validation(output_data_path, data_path, num_sketches, num_samples_per_set, results_file, scale_factor)
 
     # KH Leave One Out
-    num_clusters = 30
+    num_clusters = 15
 
     # output_data_path = "/playpen-ssd/athreya/set_summarization/data/hvtn/loo_data"
-    output_data_path = "/playpen-ssd/athreya/set_summarization/data/preeclampsia/loo_data"
-    results_file = "loo_classification_results_kh_{}sketches_{}clusters.csv".format(num_sketches, num_clusters)
+    # output_data_path = "/playpen-ssd/athreya/set_summarization/data/preeclampsia/loo_data"
+    output_data_path = "/playpen-ssd/athreya/set_summarization/data/nk/loo_data"
+
+    results_file = "loo_classification_results_kh_{}subsamples_{}sketches_{}clusters.csv".format(num_samples_per_set, num_sketches, num_clusters)
     leave_one_out_kh_validation(output_data_path, data_path, num_sketches, num_samples_per_set, num_processes, results_file, num_clusters)
 
     # Other Methods Leave One Out
-    # results_file = "loo_classification_results_others_{}sketches_{}clusters.csv".format(num_sketches, num_clusters)
-    # leave_one_out_others_validation(output_data_path, data_path, num_sketches, num_samples_per_set, num_processes, results_file, num_clusters)
+    results_file = "loo_classification_results_others_{}subsamples_{}sketches_{}clusters.csv".format(num_samples_per_set, num_sketches, num_clusters)
+    leave_one_out_others_validation(output_data_path, data_path, num_sketches, num_samples_per_set, num_processes, results_file, num_clusters)
 
 
 #
