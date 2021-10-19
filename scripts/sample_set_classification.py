@@ -92,7 +92,7 @@ def parallel_one_point_representation(fcs_filename):
 
 
 def parallel_subsampling(fcs_filename):
-    global num_samples_per_set
+    global num_samples_per_set, iteration
     fcs_data = data[data.obs.FCS_File == fcs_filename]
     fcs_X = fcs_data.X
     label = fcs_data.obs.label.unique()[0]
@@ -111,32 +111,32 @@ def parallel_subsampling(fcs_filename):
     iid_sample_data = fcs_data[fcs_data.obs.index.isin(iid_sample_index)]
     iid_rf = phi[iid_indices]
     iid_rf = np.hstack((iid_rf, label_vec))
-    iid_sample_data.write(os.path.join(output_data_path, "iid_samples", "iid_subsamples_{}k_per_set_{}_gamma{}x.h5ad".format(num_samples_per_set / 1000, fcs_filename.split(".")[0], scale_factor)))
-    np.save(os.path.join(output_data_path, "iid_samples", "{}_gamma{}x_iidrf.npy".format(fcs_filename.split(".")[0], scale_factor)), iid_rf)
+    iid_sample_data.write(os.path.join(output_data_path, "iid_samples", "iid_subsamples_{}k_per_set_{}_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, fcs_filename.split(".")[0], scale_factor, iteration)))
+    np.save(os.path.join(output_data_path, "iid_samples", "{}_gamma{}x_iidrf_{}.npy".format(fcs_filename.split(".")[0], scale_factor, iteration)), iid_rf)
 
     # Geo
     geo_indices, geo_samples, geo_rf = geosketch_main(fcs_X, num_samples_per_set, phi)
     geo_sample_data = fcs_data[fcs_data.obs.iloc[geo_indices].index]
     geo_rf = np.hstack((geo_rf, label_vec))
     print("Finished Geosketch on {}.".format(fcs_filename))
-    geo_sample_data.write(os.path.join(output_data_path, "geo_samples", "geo_subsamples_{}k_per_set_{}_gamma{}x.h5ad".format(num_samples_per_set / 1000, fcs_filename.split(".")[0], scale_factor)))
-    np.save(os.path.join(output_data_path, "geo_samples", "{}_gamma{}x_georf.npy".format(fcs_filename.split(".")[0], scale_factor)), geo_rf)
+    geo_sample_data.write(os.path.join(output_data_path, "geo_samples", "geo_subsamples_{}k_per_set_{}_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, fcs_filename.split(".")[0], scale_factor, iteration)))
+    np.save(os.path.join(output_data_path, "geo_samples", "{}_gamma{}x_georf_{}.npy".format(fcs_filename.split(".")[0], scale_factor, iteration)), geo_rf)
 
     # Hopper
     hop_indices, hop_samples, hop_rf = hopper_main(fcs_X, num_samples_per_set, phi)
     hop_sample_data = fcs_data[fcs_data.obs.iloc[hop_indices].index]
     hop_rf = np.hstack((hop_rf, label_vec))
     print("Finished Hopper on {}".format(fcs_filename))
-    hop_sample_data.write(os.path.join(output_data_path, "hop_samples", "hop_subsamples_{}k_per_set_{}_gamma{}x.h5ad".format(num_samples_per_set / 1000, fcs_filename.split(".")[0], scale_factor)))
-    np.save(os.path.join(output_data_path, "hop_samples", "{}_gamma{}x_hoprf.npy".format(fcs_filename.split(".")[0], scale_factor)), hop_rf)
+    hop_sample_data.write(os.path.join(output_data_path, "hop_samples", "hop_subsamples_{}k_per_set_{}_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, fcs_filename.split(".")[0], scale_factor, iteration)))
+    np.save(os.path.join(output_data_path, "hop_samples", "{}_gamma{}x_hoprf_{}.npy".format(fcs_filename.split(".")[0], scale_factor, iteration)), hop_rf)
 
     # KH
     kh_indices, kh_samples, kh_rf = kernel_herding_main(fcs_X, phi, num_samples_per_set)
     kh_sample_data = fcs_data[fcs_data.obs.iloc[kh_indices].index]
     kh_rf = np.hstack((kh_rf, label_vec))
     print("Finished KH on {}.".format(fcs_filename))
-    kh_sample_data.write(os.path.join(output_data_path, "kh_samples", "kh_subsamples_{}k_per_set_{}_gamma{}x.h5ad".format(num_samples_per_set/1000, fcs_filename.split(".")[0], scale_factor)))
-    np.save(os.path.join(output_data_path, "kh_samples", "{}_gamma{}x_khrf.npy".format(fcs_filename.split(".")[0], scale_factor)), kh_rf)
+    kh_sample_data.write(os.path.join(output_data_path, "kh_samples", "kh_subsamples_{}k_per_set_{}_gamma{}x_{}.h5ad".format(num_samples_per_set/1000, fcs_filename.split(".")[0], scale_factor, iteration)))
+    np.save(os.path.join(output_data_path, "kh_samples", "{}_gamma{}x_khrf_{}.npy".format(fcs_filename.split(".")[0], scale_factor, iteration)), kh_rf)
 
     # Writing sample set name to finished_sets.txt in case program hangs in the middle and we need to re-run for remaining sets
     lock.acquire()
@@ -151,7 +151,7 @@ def parallel_subsampling(fcs_filename):
 
 
 
-num_samples_per_set = 500
+num_samples_per_set = 250
 
 if(proc == 'subsample'):
     # Preprocess HVTN data
@@ -225,22 +225,23 @@ if(proc == 'classify'):
     # output_data_path = "/playpen-ssd/athreya/set_summarization/data/preeclampsia/loo_data"
     output_data_path = "/playpen-ssd/athreya/set_summarization/data/nk/loo_data"
 
-    results_file = "5fold_cv_classification_results_{}subsamples_{}.csv".format(num_samples_per_set, scale_factor)
+    results_file = "5fold_cv_classification_results_{}subsamples_{}.csv".format(num_samples_per_set / 1000, scale_factor)
     cross_validation(output_data_path, data_path, num_sketches, num_samples_per_set, results_file, scale_factor)
 
     # KH Leave One Out
-    num_clusters = 15
+    num_clusters = [15, 30, 50]
 
-    # output_data_path = "/playpen-ssd/athreya/set_summarization/data/hvtn/loo_data"
-    # output_data_path = "/playpen-ssd/athreya/set_summarization/data/preeclampsia/loo_data"
-    output_data_path = "/playpen-ssd/athreya/set_summarization/data/nk/loo_data"
+    for cluster_count in num_clusters:
+        # output_data_path = "/playpen-ssd/athreya/set_summarization/data/hvtn/loo_data"
+        # output_data_path = "/playpen-ssd/athreya/set_summarization/data/preeclampsia/loo_data"
+        output_data_path = "/playpen-ssd/athreya/set_summarization/data/nk/loo_data"
 
-    results_file = "loo_classification_results_kh_{}subsamples_{}sketches_{}clusters.csv".format(num_samples_per_set, num_sketches, num_clusters)
-    leave_one_out_kh_validation(output_data_path, data_path, num_sketches, num_samples_per_set, num_processes, results_file, num_clusters)
+        results_file = "loo_classification_results_kh_{}subsamples_{}sketches_{}clusters.csv".format(num_samples_per_set / 1000, num_sketches, num_clusters)
+        leave_one_out_kh_validation(output_data_path, data_path, num_sketches, num_samples_per_set, num_processes, results_file, num_clusters)
 
-    # Other Methods Leave One Out
-    results_file = "loo_classification_results_others_{}subsamples_{}sketches_{}clusters.csv".format(num_samples_per_set, num_sketches, num_clusters)
-    leave_one_out_others_validation(output_data_path, data_path, num_sketches, num_samples_per_set, num_processes, results_file, num_clusters)
+        # Other Methods Leave One Out
+        results_file = "loo_classification_results_others_{}subsamples_{}sketches_{}clusters.csv".format(num_samples_per_set / 1000, num_sketches, num_clusters)
+        leave_one_out_others_validation(output_data_path, data_path, num_sketches, num_samples_per_set, num_processes, results_file, num_clusters)
 
 
 #
