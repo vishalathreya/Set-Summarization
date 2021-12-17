@@ -21,7 +21,9 @@ from model import *
 from train import *
 import utils
 
-start, end, num_processes, proc, scale_factor, iteration = int(sys.argv[1]), int(sys.argv[2]), int(sys.argv[3]), sys.argv[4], float(sys.argv[5]), int(sys.argv[6])
+start, end, num_processes, proc, scale_factor, iteration, num_samples_per_set = int(sys.argv[1]), int(sys.argv[2]), int(sys.argv[3]), \
+                                                                                sys.argv[4], float(sys.argv[5]), int(sys.argv[6]), \
+                                                                                int(sys.argv[7])
 
 def preprocess_input(input_data):
     hvtn_req_markers = ["FSC-A", "FSC-H", "CD4", "SSC-A", "ViViD", "TNFa", "IL4", "IFNg", "CD8", "CD3", "IL2"]
@@ -103,6 +105,11 @@ def parallel_subsampling(fcs_filename):
     print("Starting {} -> gamma0 = {}, scale_factor = {}, gamma = {}, on process {}".format(fcs_filename, gammas[3], scale_factor, gamma, current_process().pid))
 
     phi = random_feats(fcs_X, gamma)
+    # Save random features of original data
+    # h5ad original samples
+    fcs_data.write(os.path.join(output_data_path, "orig_samples", "orig_subsamples_{}k_per_set_{}_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, fcs_filename.split(".")[0], scale_factor, iteration)))
+    # Random fourier features of samples
+    np.save(os.path.join(output_data_path, "orig_samples", "{}_{}k_per_set_gamma{}x_phi_{}.npy".format(fcs_filename.split(".")[0], num_samples_per_set / 1000, scale_factor, iteration)), phi)
     print("Calculated Random Features on {}".format(fcs_filename))
 
     # IID subsamples
@@ -112,7 +119,7 @@ def parallel_subsampling(fcs_filename):
     iid_rf = phi[iid_indices]
     iid_rf = np.hstack((iid_rf, label_vec))
     iid_sample_data.write(os.path.join(output_data_path, "iid_samples", "iid_subsamples_{}k_per_set_{}_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, fcs_filename.split(".")[0], scale_factor, iteration)))
-    np.save(os.path.join(output_data_path, "iid_samples", "{}_gamma{}x_iidrf_{}.npy".format(fcs_filename.split(".")[0], scale_factor, iteration)), iid_rf)
+    np.save(os.path.join(output_data_path, "iid_samples", "{}_{}k_per_set_gamma{}x_iidrf_{}.npy".format(fcs_filename.split(".")[0], num_samples_per_set / 1000, scale_factor, iteration)), iid_rf)
 
     # Geo
     geo_indices, geo_samples, geo_rf = geosketch_main(fcs_X, num_samples_per_set, phi)
@@ -120,7 +127,7 @@ def parallel_subsampling(fcs_filename):
     geo_rf = np.hstack((geo_rf, label_vec))
     print("Finished Geosketch on {}.".format(fcs_filename))
     geo_sample_data.write(os.path.join(output_data_path, "geo_samples", "geo_subsamples_{}k_per_set_{}_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, fcs_filename.split(".")[0], scale_factor, iteration)))
-    np.save(os.path.join(output_data_path, "geo_samples", "{}_gamma{}x_georf_{}.npy".format(fcs_filename.split(".")[0], scale_factor, iteration)), geo_rf)
+    np.save(os.path.join(output_data_path, "geo_samples", "{}_{}k_per_set_gamma{}x_georf_{}.npy".format(fcs_filename.split(".")[0], num_samples_per_set / 1000, scale_factor, iteration)), geo_rf)
 
     # Hopper
     hop_indices, hop_samples, hop_rf = hopper_main(fcs_X, num_samples_per_set, phi)
@@ -128,7 +135,7 @@ def parallel_subsampling(fcs_filename):
     hop_rf = np.hstack((hop_rf, label_vec))
     print("Finished Hopper on {}".format(fcs_filename))
     hop_sample_data.write(os.path.join(output_data_path, "hop_samples", "hop_subsamples_{}k_per_set_{}_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, fcs_filename.split(".")[0], scale_factor, iteration)))
-    np.save(os.path.join(output_data_path, "hop_samples", "{}_gamma{}x_hoprf_{}.npy".format(fcs_filename.split(".")[0], scale_factor, iteration)), hop_rf)
+    np.save(os.path.join(output_data_path, "hop_samples", "{}_{}k_per_set_gamma{}x_hoprf_{}.npy".format(fcs_filename.split(".")[0], num_samples_per_set / 1000, scale_factor, iteration)), hop_rf)
 
     # KH
     kh_indices, kh_samples, kh_rf = kernel_herding_main(fcs_X, phi, num_samples_per_set)
@@ -136,7 +143,7 @@ def parallel_subsampling(fcs_filename):
     kh_rf = np.hstack((kh_rf, label_vec))
     print("Finished KH on {}.".format(fcs_filename))
     kh_sample_data.write(os.path.join(output_data_path, "kh_samples", "kh_subsamples_{}k_per_set_{}_gamma{}x_{}.h5ad".format(num_samples_per_set/1000, fcs_filename.split(".")[0], scale_factor, iteration)))
-    np.save(os.path.join(output_data_path, "kh_samples", "{}_gamma{}x_khrf_{}.npy".format(fcs_filename.split(".")[0], scale_factor, iteration)), kh_rf)
+    np.save(os.path.join(output_data_path, "kh_samples", "{}_{}k_per_set_gamma{}x_khrf_{}.npy".format(fcs_filename.split(".")[0], num_samples_per_set / 1000, scale_factor, iteration)), kh_rf)
 
     # Writing sample set name to finished_sets.txt in case program hangs in the middle and we need to re-run for remaining sets
     lock.acquire()
@@ -149,9 +156,6 @@ def parallel_subsampling(fcs_filename):
     print("Released lock for {}".format(fcs_filename))
 
 
-
-
-num_samples_per_set = 250
 
 if(proc == 'subsample'):
     # Preprocess HVTN data
@@ -195,7 +199,7 @@ if(proc == 'merge'):
     import shutil
     for method in ["iid", "kh", "hop", "geo"]:
         folder_path = os.path.join(output_data_path, "{}_samples".format(method))
-        file_regex = "gamma{}x".format(scale_factor)
+        file_regex = "gamma{}x_{}".format(scale_factor, iteration)
 
         # Merge original subsample anndata
         output_file_name = "{}_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(method, num_samples_per_set / 1000, scale_factor, iteration)
@@ -204,10 +208,10 @@ if(proc == 'merge'):
         shutil.move(os.path.join(folder_path, output_file_name), os.path.join(output_data_path, output_file_name))
 
         # Merge KHRF subsample npy files
-        output_file_name = "{}_khrf_{}k_per_set_gamma{}x_{}.npy".format(method, num_samples_per_set / 1000, scale_factor, iteration)
-        utils.merge_npy(folder_path, file_regex, output_file_name)
-        shutil.move(os.path.join(folder_path, output_file_name), os.path.join(output_data_path, output_file_name))
-        print("Merged {}".format(method))
+        # output_file_name = "{}_khrf_{}k_per_set_gamma{}x_{}.npy".format(method, num_samples_per_set / 1000, scale_factor, iteration)
+        # utils.merge_npy(folder_path, file_regex, output_file_name)
+        # shutil.move(os.path.join(folder_path, output_file_name), os.path.join(output_data_path, output_file_name))
+        # print("Merged {}".format(method))
 
     with open(os.path.join(output_data_path, "finished_sets.txt"), 'w') as f:
         f.write("Finished Merge for Scale Factor = {}, Iteration = {} -:".format(scale_factor, iteration))
@@ -225,13 +229,13 @@ if(proc == 'classify'):
     # output_data_path = "/playpen-ssd/athreya/set_summarization/data/preeclampsia/loo_data"
     output_data_path = "/playpen-ssd/athreya/set_summarization/data/nk/loo_data"
 
-    results_file = "5fold_cv_classification_results_{}subsamples_{}.csv".format(num_samples_per_set / 1000, scale_factor)
-    cross_validation(output_data_path, data_path, num_sketches, num_samples_per_set, results_file, scale_factor)
+    # results_file = "5fold_cv_classification_results_{}subsamples_{}.csv".format(num_samples_per_set / 1000, scale_factor)
+    # cross_validation(output_data_path, data_path, num_sketches, num_samples_per_set, results_file, scale_factor)
 
     # KH Leave One Out
-    num_clusters = [15, 30, 50]
+    cluster_counts = [15, 30, 50]
 
-    for cluster_count in num_clusters:
+    for num_clusters in cluster_counts:
         # output_data_path = "/playpen-ssd/athreya/set_summarization/data/hvtn/loo_data"
         # output_data_path = "/playpen-ssd/athreya/set_summarization/data/preeclampsia/loo_data"
         output_data_path = "/playpen-ssd/athreya/set_summarization/data/nk/loo_data"
