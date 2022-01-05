@@ -163,15 +163,15 @@ if(proc == 'subsample'):
     # standard_data = preprocess_input(input_data)
     # standard_data.write(os.path.join(data_path, "hvtn_preprocessed.h5ad"))
 
-    # output_data_path = "/playpen-ssd/athreya/set_summarization/data/hvtn"
+    output_data_path = "/playpen-ssd/athreya/set_summarization/data/hvtn"
     # output_data_path = "/playpen-ssd/athreya/set_summarization/data/preeclampsia"
-    output_data_path = "/playpen-ssd/athreya/set_summarization/data/nk"
+    # output_data_path = "/playpen-ssd/athreya/set_summarization/data/nk"
 
     data_path = "/home/athreya/private/set_summarization/data/"
 
-    # data = anndata.read_h5ad(os.path.join(data_path, "hvtn_preprocessed.h5ad"))
+    data = anndata.read_h5ad(os.path.join(data_path, "hvtn_preprocessed.h5ad"))
     # data = anndata.read_h5ad(os.path.join(data_path, "preeclampsia_preprocessed.h5ad"))
-    data = anndata.read_h5ad(os.path.join(data_path, "nk_cell_preprocessed.h5ad"))
+    # data = anndata.read_h5ad(os.path.join(data_path, "nk_cell_preprocessed.h5ad"))
 
     print("Finished reading preprocessed data. Starting {} pools".format(num_processes))
 
