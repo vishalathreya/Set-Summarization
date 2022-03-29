@@ -72,26 +72,6 @@ def nn_gamma_range(X):
     return gammas_3nn
 
 
-def parallel_one_point_representation(fcs_filename):
-    global gammas
-    fcs_data = data[data.obs.FCS_File == fcs_filename]
-    fcs_X = fcs_data.X
-    label = fcs_data.obs.label.unique()[0]
-    label_vec = np.repeat(label, num_samples_per_set).reshape(-1, 1)
-
-    for gamma in gammas:
-        phi = random_feats(fcs_X, gamma, frequency_seed=0)
-        phi_mean = np.mean(phi, axis=0).reshape(1, -1)
-        phi_max = np.max(phi, axis=0).reshape(1, -1)
-        # Append label at the end of vectors
-        phi_mean = np.hstack((phi_mean, np.asarray([label]).reshape(1,-1)))
-        phi_max = np.hstack((phi_max, np.asarray([label]).reshape(1, -1)))
-        np.save(os.path.join(output_data_path, "one_point_rep", "{}_meanvec_gamma{}.npy".format(fcs_filename, gamma)), phi_mean)
-        np.save(os.path.join(output_data_path, "one_point_rep", "{}_maxvec_gamma{}.npy".format(fcs_filename, gamma)), phi_max)
-
-    print("Finished {}".format(fcs_filename))
-
-
 
 def parallel_subsampling(fcs_filename):
     global num_samples_per_set, iteration
@@ -248,57 +228,3 @@ if(proc == 'classify'):
         leave_one_out_others_validation(output_data_path, data_path, num_sketches, num_samples_per_set, num_processes, results_file, num_clusters)
 
 
-#
-# gamma_0 = 2.5
-# gammas = [gamma_0 / i for i in (0.125, 0.25, 0.5, 1, 2, 4, 8)]
-# if (proc == 'meanvector_prep'):
-#     data = anndata.read_h5ad(os.path.join(data_path, "hvtn_preprocessed.h5ad"))
-#     print("Finished reading preprocessed data. Starting {} pools".format(num_processes))
-#     fcs_file = data.obs.FCS_File.values.unique()[start:end]
-#
-#     pool = Pool(processes=num_processes)
-#     pool.map(parallel_one_point_representation, fcs_file)
-#     pool.close()
-#
-#
-# # Run merge for mean and max vectors before running classify below (so that vectors from all sample sets are merged into 1 final vector)
-# if(proc == 'mean_classify'):
-#     for gamma in sorted(gammas):
-#         mean_x, mean_y = np.load(os.path.join(output_data_path, "one_point_rep", "final_meanvec_gamma{}.npy".format(gamma)))[:, :2000], np.load(os.path.join(output_data_path, "one_point_rep", "final_meanvec_gamma{}.npy".format(gamma)))[:, 2000]
-#         mean_khrf_x, mean_khrf_y = np.load(os.path.join(output_data_path, "one_point_rep", "final_meanvec_gamma0.5x_khrf.npy"))[:, :2000], np.load(os.path.join(output_data_path, "one_point_rep", "final_meanvec_gamma0.5x_khrf.npy"))[:, 2000]
-#         # max_x, max_y = np.load(os.path.join(output_data_path, "one_point_rep", "final_maxvec_gamma{}.npy".format(gamma)))[:, :2000], np.load(os.path.join(output_data_path, "one_point_rep",  "final_maxvec_gamma{}.npy".format(gamma)))[:, 2000]
-#         print("Running for gamma = {}".format(gamma))
-#         kf5 = KFold(n_splits=5, shuffle=True)
-#         results = []
-#         for i, (train_inds, test_inds) in enumerate(kf5.split(mean_x)):
-#             # Splitting out train and test sample set fcs files
-#             # Testing on Global mean vectors
-#             print("Training and Testing on Global")
-#             train_vec, train_labels, test_vec, test_labels = mean_x[train_inds], mean_y[train_inds], mean_x[test_inds], mean_y[test_inds]
-#             model, acc, cf_matrix = train_classifier(train_vec, train_labels, test_vec, test_labels, model_type='svm')
-#             results.append([i+1, "trainglobal_testglobal", gamma, acc])
-#
-#             # Testing on KH mean vectors
-#             print("Training on Global and Testing on KH")
-#             preds = model.predict(mean_khrf_x)
-#             acc = metrics.accuracy_score(mean_khrf_y, preds)
-#             results.append([i + 1, "trainglobal_testKH", gamma, acc])
-#
-#             # Train on KH, test on KH
-#             print("Training and Testing on KH")
-#             train_vec, train_labels, test_vec, test_labels = mean_khrf_x[train_inds], mean_khrf_y[train_inds], mean_khrf_x[test_inds], mean_khrf_y[test_inds]
-#             model, acc, cf_matrix = train_classifier(train_vec, train_labels, test_vec, test_labels, model_type='svm')
-#             results.append([i + 1, "trainKH_testKH", gamma, acc])
-#
-#
-#         df = pd.DataFrame(results, columns=['Fold #', "Rep", "Gamma", "Acc"])
-#         # df2 = df.set_index(['Fold #', 'subsampling'])
-#         # df_final = df2.groupby("subsampling").mean().reset_index()
-#
-#
-#         classification_results_file = os.path.join(data_path, "meanvector_classification_KH_results.csv")
-#         if(os.path.isfile(classification_results_file)):
-#             df.to_csv(classification_results_file, mode='a', header=None, index=False)
-#         else:
-#             df.to_csv(classification_results_file, index=False)
-#
