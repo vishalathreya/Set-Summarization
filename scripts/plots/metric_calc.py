@@ -1,6 +1,5 @@
 # Ported code from Colab notebook for computing subsampling metrics (cluster freq, singular values, RFE)
 
-from model import *
 import sys
 import os
 import anndata
@@ -95,36 +94,39 @@ def singular_values_eval(fcs_filename, num_samples_per_set):
     geo_sv = np.sqrt(1.0 / geo_samples.shape[0]) * np.linalg.svd(geo_samples, compute_uv=False)
     hop_sv = np.sqrt(1.0 / hop_samples.shape[0]) * np.linalg.svd(hop_samples, compute_uv=False)
 
-    kh_sv_l1 = np.abs(kh_sv - orig_sv)
-    iid_sv_l1 = np.abs(iid_sv - orig_sv)
-    geo_sv_l1 = np.abs(geo_sv - orig_sv)
-    hop_sv_l1 = np.abs(hop_sv - orig_sv)
+    # Calculate L1 distance b/w true and sketched set
+    kh_sv_l1 = np.linalg.norm(kh_sv - orig_sv, ord=1)
+    iid_sv_l1 = np.linalg.norm(iid_sv - orig_sv, ord=1)
+    geo_sv_l1 = np.linalg.norm(geo_sv - orig_sv, ord=1)
+    hop_sv_l1 = np.linalg.norm(hop_sv - orig_sv, ord=1)
 
     return kh_sv_l1, iid_sv_l1, geo_sv_l1, hop_sv_l1
 
 def singular_values_helper():
+    sv_results = []
     # Variables to accumulate singular values across sample sets
-    kh_final_sv, iid_final_sv, geo_final_sv, hop_final_sv = np.zeros((1, data.shape[1])), \
-                                                            np.zeros((1, data.shape[1])), np.zeros((1, data.shape[1])), \
-                                                            np.zeros((1, data.shape[1]))
+    for num_samples_per_set in num_samples_per_set_range:
+        print("Running singular values for {} samples per set".format(num_samples_per_set))
 
-    for fcs_filename in fcs_files:
-        # Perform singular value calc only for 500 subsamples per sample set
-        kh_sv_l1, iid_sv_l1, geo_sv_l1, hop_sv_l1 = singular_values_eval(fcs_filename, 500)
-        kh_final_sv += kh_sv_l1
-        iid_final_sv += iid_sv_l1
-        geo_final_sv += geo_sv_l1
-        hop_final_sv += hop_sv_l1
-        print("Finished calculating Singular Values for {}".format(fcs_filename))
+        kh_final_sv, iid_final_sv, geo_final_sv, hop_final_sv = 0, 0, 0, 0
+        for fcs_filename in fcs_files:
+            kh_sv_l1, iid_sv_l1, geo_sv_l1, hop_sv_l1 = singular_values_eval(fcs_filename, num_samples_per_set)
+            kh_final_sv += kh_sv_l1
+            iid_final_sv += iid_sv_l1
+            geo_final_sv += geo_sv_l1
+            hop_final_sv += hop_sv_l1
+            print("Finished calculating Singular Values for {}".format(fcs_filename))
 
-    # Average across sample sets
-    kh_final_sv /= len(fcs_files)
-    iid_final_sv /= len(fcs_files)
-    geo_final_sv /= len(fcs_files)
-    hop_final_sv /= len(fcs_files)
+        # Average across sample sets
+        kh_final_sv /= len(fcs_files)
+        iid_final_sv /= len(fcs_files)
+        geo_final_sv /= len(fcs_files)
+        hop_final_sv /= len(fcs_files)
 
-    sv_results = np.vstack((kh_final_sv, iid_final_sv, geo_final_sv, hop_final_sv))       # ROWS are methods
-    np.save(os.path.join(data_path, "metrics_results", "sv_evaluation.npy"), sv_results)
+        # Save singular values for each num_samples_per_set
+        sv_results.append([num_samples_per_set, kh_final_sv, iid_final_sv, geo_final_sv, hop_final_sv])       # Columns are methods
+    final = pd.DataFrame(sv_results, columns=['Samples per set', 'KH', 'IID', 'Geo', 'Hopper'])
+    final.to_csv(os.path.join(data_path, "metrics_results", "sv_evaluation.csv"))
 
 
 
