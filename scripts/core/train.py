@@ -18,19 +18,19 @@ from functools import partial
 from model import *
 
 
-def cross_validation(output_data_path, data_path, num_sketches, num_samples_per_set, results_file, scale_factor=None):
+def cross_validation(input_path, output_path, num_sketches, num_samples_per_set, results_file, scale_factor=None):
     for sketch1, sketch2 in [(i, j) for i in range(1, num_sketches+1) for j in range(1, num_sketches+1) if(i != j)]:
     # for sketch1, sketch2 in [(1, 2),]:
         print("Reading data for sketch1 = {}, sketch2 = {}".format(sketch1, sketch2))
-        kh_sample_data = anndata.read_h5ad(os.path.join(output_data_path, "kh_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, scale_factor, sketch1)))
-        iid_sample_data = anndata.read_h5ad(os.path.join(output_data_path, "iid_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, scale_factor, sketch1)))
-        geo_sample_data = anndata.read_h5ad(os.path.join(output_data_path, "geo_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, scale_factor, sketch1)))
-        hop_sample_data = anndata.read_h5ad(os.path.join(output_data_path, "hop_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, scale_factor, sketch1)))
+        kh_sample_data = anndata.read_h5ad(os.path.join(input_path, "kh_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, scale_factor, sketch1)))
+        iid_sample_data = anndata.read_h5ad(os.path.join(input_path, "iid_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, scale_factor, sketch1)))
+        geo_sample_data = anndata.read_h5ad(os.path.join(input_path, "geo_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, scale_factor, sketch1)))
+        hop_sample_data = anndata.read_h5ad(os.path.join(input_path, "hop_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, scale_factor, sketch1)))
 
-        kh_sample_data2 = anndata.read_h5ad(os.path.join(output_data_path, "kh_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, scale_factor, sketch2)))
-        iid_sample_data2 = anndata.read_h5ad(os.path.join(output_data_path, "iid_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, scale_factor, sketch2)))
-        geo_sample_data2 = anndata.read_h5ad(os.path.join(output_data_path, "geo_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, scale_factor, sketch2)))
-        hop_sample_data2 = anndata.read_h5ad(os.path.join(output_data_path, "hop_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, scale_factor, sketch2)))
+        kh_sample_data2 = anndata.read_h5ad(os.path.join(input_path, "kh_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, scale_factor, sketch2)))
+        iid_sample_data2 = anndata.read_h5ad(os.path.join(input_path, "iid_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, scale_factor, sketch2)))
+        geo_sample_data2 = anndata.read_h5ad(os.path.join(input_path, "geo_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, scale_factor, sketch2)))
+        hop_sample_data2 = anndata.read_h5ad(os.path.join(input_path, "hop_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, scale_factor, sketch2)))
 
         for num_trials in range(20):
             print("Starting trial {}".format(num_trials +1))
@@ -75,7 +75,7 @@ def cross_validation(output_data_path, data_path, num_sketches, num_samples_per_
                     final_results = pd.concat((final_results, df_final))
 
             print("Finished for trial {}. Writing to file".format(num_trials+1))
-            classification_results_file = os.path.join(data_path, results_file)
+            classification_results_file = os.path.join(output_path, results_file)
             if(os.path.isfile(classification_results_file)):
                 final_results.to_csv(classification_results_file, mode='a', header=None, index=False)
             else:
@@ -129,7 +129,7 @@ def parallel_leaveoneout_kh_classification(test_set, num_clusters, kh_data):
 
 
 
-def leave_one_out_kh_validation(output_data_path, data_path, num_sketches, num_samples_per_set, num_processes, results_file, num_clusters):
+def leave_one_out_kh_validation(input_path, output_path, num_sketches, num_samples_per_set, num_processes, results_file, num_clusters):
     print("Starting LOO validation for Kernel Herding sketches using {} processes and {} KMeans clusters".format(num_processes, num_clusters))
     pool = Pool(processes=num_processes)
     for sketch1, sketch2 in [(i, j) for i in range(1, num_sketches+1) for j in range(1, num_sketches+1) if(i != j)]:
@@ -137,14 +137,14 @@ def leave_one_out_kh_validation(output_data_path, data_path, num_sketches, num_s
         print("Reading data for sketch1 = {}, sketch2 = {}".format(sketch1, sketch2))
 
         # Load sketches 1&2 for each gamma value
-        kh_1x_data = anndata.read_h5ad(os.path.join(output_data_path, "kh_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, "1.0", sketch1)))
-        kh_1x_data2 = anndata.read_h5ad(os.path.join(output_data_path, "kh_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, "1.0", sketch2)))
-        kh_2x_data = anndata.read_h5ad(os.path.join(output_data_path, "kh_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, "2.0", sketch1)))
-        kh_2x_data2 = anndata.read_h5ad(os.path.join(output_data_path, "kh_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, "2.0", sketch2)))
-        kh_0_5x_data = anndata.read_h5ad(os.path.join(output_data_path, "kh_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, "0.5", sketch1)))
-        kh_0_5x_data2 = anndata.read_h5ad(os.path.join(output_data_path, "kh_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, "0.5", sketch2)))
-        kh_0_2x_data = anndata.read_h5ad(os.path.join(output_data_path, "kh_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, "0.2", sketch1)))
-        kh_0_2x_data2 = anndata.read_h5ad(os.path.join(output_data_path, "kh_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, "0.2", sketch2)))
+        kh_1x_data = anndata.read_h5ad(os.path.join(input_path, "kh_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, "1.0", sketch1)))
+        kh_1x_data2 = anndata.read_h5ad(os.path.join(input_path, "kh_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, "1.0", sketch2)))
+        kh_2x_data = anndata.read_h5ad(os.path.join(input_path, "kh_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, "2.0", sketch1)))
+        kh_2x_data2 = anndata.read_h5ad(os.path.join(input_path, "kh_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, "2.0", sketch2)))
+        kh_0_5x_data = anndata.read_h5ad(os.path.join(input_path, "kh_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, "0.5", sketch1)))
+        kh_0_5x_data2 = anndata.read_h5ad(os.path.join(input_path, "kh_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, "0.5", sketch2)))
+        kh_0_2x_data = anndata.read_h5ad(os.path.join(input_path, "kh_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, "0.2", sketch1)))
+        kh_0_2x_data2 = anndata.read_h5ad(os.path.join(input_path, "kh_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, "0.2", sketch2)))
 
         # Re-run N times
         for num_trials in range(5):
@@ -167,7 +167,7 @@ def leave_one_out_kh_validation(output_data_path, data_path, num_sketches, num_s
             results.append([sketch1, sketch2, num_trials + 1, "kh_hyperparam", acc, gamma_pick_rate, ypred_positive_count])
             final_results = pd.DataFrame(results, columns=["Sketch1", "Sketch2", "Trial #", "Method", "Acc", "Gamma Pick Rate", "ypred +ve Count"])
             print("Finished for trial {}. Writing to file".format(num_trials + 1))
-            classification_results_file = os.path.join(data_path, results_file)
+            classification_results_file = os.path.join(output_path, results_file)
             if(os.path.isfile(classification_results_file)):
                 final_results.to_csv(classification_results_file, mode='a', header=None, index=False)
             else:
@@ -230,7 +230,7 @@ def parallel_leaveoneout_others_classification(test_set, num_clusters, data):
 
 
 
-def leave_one_out_others_validation(output_data_path, data_path, num_sketches, num_samples_per_set, num_processes, results_file, num_clusters):
+def leave_one_out_others_validation(input_path, output_path, num_sketches, num_samples_per_set, num_processes, results_file, num_clusters):
     print("Starting LOO validation for IID, Geo, Hopper and KH (only 1 gamma) sketches using {} processes and {} KMeans clusters".format(num_processes, num_clusters))
     pool = Pool(processes=num_processes)
     for sketch1, sketch2 in [(i, j) for i in range(1, num_sketches+1) for j in range(1, num_sketches+1) if(i != j)]:
@@ -238,15 +238,15 @@ def leave_one_out_others_validation(output_data_path, data_path, num_sketches, n
         print("Reading data for sketch1 = {}, sketch2 = {}".format(sketch1, sketch2))
 
         # Load sketches 1&2 for each of the methods
-        iid_data = anndata.read_h5ad(os.path.join(output_data_path, "iid_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, 1.0, sketch1)))
-        geo_data = anndata.read_h5ad(os.path.join(output_data_path, "geo_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, 1.0, sketch1)))
-        hop_data = anndata.read_h5ad(os.path.join(output_data_path, "hop_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, 1.0, sketch1)))
-        kh_data = anndata.read_h5ad(os.path.join(output_data_path, "kh_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, 1.0, sketch1)))
+        iid_data = anndata.read_h5ad(os.path.join(input_path, "iid_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, 1.0, sketch1)))
+        geo_data = anndata.read_h5ad(os.path.join(input_path, "geo_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, 1.0, sketch1)))
+        hop_data = anndata.read_h5ad(os.path.join(input_path, "hop_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, 1.0, sketch1)))
+        kh_data = anndata.read_h5ad(os.path.join(input_path, "kh_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, 1.0, sketch1)))
 
-        iid_data2 = anndata.read_h5ad(os.path.join(output_data_path, "iid_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, 1.0, sketch2)))
-        geo_data2 = anndata.read_h5ad(os.path.join(output_data_path, "geo_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, 1.0, sketch2)))
-        hop_data2 = anndata.read_h5ad(os.path.join(output_data_path, "hop_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, 1.0, sketch2)))
-        kh_data2 = anndata.read_h5ad(os.path.join(output_data_path, "kh_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, 1.0, sketch2)))
+        iid_data2 = anndata.read_h5ad(os.path.join(input_path, "iid_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, 1.0, sketch2)))
+        geo_data2 = anndata.read_h5ad(os.path.join(input_path, "geo_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, 1.0, sketch2)))
+        hop_data2 = anndata.read_h5ad(os.path.join(input_path, "hop_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, 1.0, sketch2)))
+        kh_data2 = anndata.read_h5ad(os.path.join(input_path, "kh_subsamples_{}k_per_set_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, 1.0, sketch2)))
 
 
         # Re-run N times
@@ -269,7 +269,7 @@ def leave_one_out_others_validation(output_data_path, data_path, num_sketches, n
             results.append([sketch1, sketch2, num_trials + 1, "kh", acc[3][0]])
             final_results = pd.DataFrame(results, columns=["Sketch1", "Sketch2", "Trial #", "Method", "Acc"])
             print("Finished for trial {}. Writing to file".format(num_trials + 1))
-            classification_results_file = os.path.join(data_path, results_file)
+            classification_results_file = os.path.join(output_path, results_file)
             if(os.path.isfile(classification_results_file)):
                 final_results.to_csv(classification_results_file, mode='a', header=None, index=False)
             else:

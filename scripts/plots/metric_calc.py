@@ -1,19 +1,13 @@
 # Ported code from Colab notebook for computing subsampling metrics (cluster freq, singular values, RFE)
 
-import sys
 import os
+import argparse
 import anndata
 import pandas as pd
 import numpy as np
-
 from sklearn.cluster import KMeans
+from scripts.core.sample_set_classification import print_args
 
-import seaborn as sns
-import matplotlib.pyplot as plt
-from matplotlib.lines import Line2D
-from matplotlib.colors import ListedColormap
-
-dataset = sys.argv[1]
 
 def rfe_metric_calculation(vec, beta):
   return np.mean(np.dot(vec, beta), axis=0)
@@ -22,11 +16,11 @@ def rfe_eval(fcs_filename):
     avg_l1 = []
     for num_samples_per_set in num_samples_per_set_range:
         print("RFE Eval for num_subsamples = {}".format(num_samples_per_set))
-        phi = np.load(os.path.join(data_path, "orig_samples", "{}_{}k_per_set_gamma{}x_phi_{}.npy".format(fcs_filename.split(".")[0], num_samples_per_set / 1000, scale_factor, iteration)))
-        kh_rf = np.load(os.path.join(data_path, "kh_samples", "{}_{}k_per_set_gamma{}x_khrf_{}.npy".format(fcs_filename.split(".")[0], num_samples_per_set / 1000, scale_factor, iteration)))
-        iid_rf = np.load(os.path.join(data_path, "iid_samples", "{}_{}k_per_set_gamma{}x_iidrf_{}.npy".format(fcs_filename.split(".")[0], num_samples_per_set / 1000, scale_factor, iteration)))
-        geo_rf = np.load(os.path.join(data_path, "geo_samples", "{}_{}k_per_set_gamma{}x_georf_{}.npy".format(fcs_filename.split(".")[0], num_samples_per_set / 1000, scale_factor, iteration)))
-        hop_rf = np.load(os.path.join(data_path, "hop_samples", "{}_{}k_per_set_gamma{}x_hoprf_{}.npy".format(fcs_filename.split(".")[0], num_samples_per_set / 1000, scale_factor, iteration)))
+        phi = np.load(os.path.join(args.output_path, "orig_samples", "{}_{}k_per_set_gamma{}x_phi_{}.npy".format(fcs_filename.split(".")[0], num_samples_per_set / 1000, args.scale_factor, args.iteration)))
+        kh_rf = np.load(os.path.join(args.output_path, "kh_samples", "{}_{}k_per_set_gamma{}x_khrf_{}.npy".format(fcs_filename.split(".")[0], num_samples_per_set / 1000, args.scale_factor, args.iteration)))
+        iid_rf = np.load(os.path.join(args.output_path, "iid_samples", "{}_{}k_per_set_gamma{}x_iidrf_{}.npy".format(fcs_filename.split(".")[0], num_samples_per_set / 1000, args.scale_factor, args.iteration)))
+        geo_rf = np.load(os.path.join(args.output_path, "geo_samples", "{}_{}k_per_set_gamma{}x_georf_{}.npy".format(fcs_filename.split(".")[0], num_samples_per_set / 1000, args.scale_factor, args.iteration)))
+        hop_rf = np.load(os.path.join(args.output_path, "hop_samples", "{}_{}k_per_set_gamma{}x_hoprf_{}.npy".format(fcs_filename.split(".")[0], num_samples_per_set / 1000, args.scale_factor, args.iteration)))
 
         # Take first 2k feature length, ignoring last column which is the label
         iid_rf = iid_rf[:, :2000]
@@ -76,17 +70,17 @@ def rfe_helper():
     hop_final_l1 /= len(fcs_files)
 
     l1_results = np.vstack((kh_final_l1, iid_final_l1, geo_final_l1, hop_final_l1)).T       # COLUMNS are methods
-    np.save(os.path.join(data_path, "metrics_results", "rfe_evaluation.npy"), l1_results)
+    np.save(os.path.join(args.output_path, "metrics_results", "rfe_evaluation.npy"), l1_results)
 
 
 
 def singular_values_eval(fcs_filename, num_samples_per_set):
     print("Singular Value Eval for num_subsamples = {}".format(num_samples_per_set))
-    orig_samples = anndata.read_h5ad(os.path.join(data_path, "orig_samples", "orig_subsamples_{}k_per_set_{}_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, fcs_filename.split(".")[0], scale_factor, iteration))).X
-    kh_samples = anndata.read_h5ad(os.path.join(data_path, "kh_samples", "kh_subsamples_{}k_per_set_{}_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, fcs_filename.split(".")[0], scale_factor, iteration))).X
-    iid_samples = anndata.read_h5ad(os.path.join(data_path, "iid_samples", "iid_subsamples_{}k_per_set_{}_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, fcs_filename.split(".")[0], scale_factor, iteration))).X
-    geo_samples = anndata.read_h5ad(os.path.join(data_path, "geo_samples", "geo_subsamples_{}k_per_set_{}_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, fcs_filename.split(".")[0], scale_factor, iteration))).X
-    hop_samples = anndata.read_h5ad(os.path.join(data_path, "hop_samples", "hop_subsamples_{}k_per_set_{}_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, fcs_filename.split(".")[0], scale_factor, iteration))).X
+    orig_samples = anndata.read_h5ad(os.path.join(args.output_path, "orig_samples", "orig_subsamples_{}k_per_set_{}_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, fcs_filename.split(".")[0], args.scale_factor, args.iteration))).X
+    kh_samples = anndata.read_h5ad(os.path.join(args.output_path, "kh_samples", "kh_subsamples_{}k_per_set_{}_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, fcs_filename.split(".")[0], args.scale_factor, args.iteration))).X
+    iid_samples = anndata.read_h5ad(os.path.join(args.output_path, "iid_samples", "iid_subsamples_{}k_per_set_{}_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, fcs_filename.split(".")[0], args.scale_factor, args.iteration))).X
+    geo_samples = anndata.read_h5ad(os.path.join(args.output_path, "geo_samples", "geo_subsamples_{}k_per_set_{}_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, fcs_filename.split(".")[0], args.scale_factor, args.iteration))).X
+    hop_samples = anndata.read_h5ad(os.path.join(args.output_path, "hop_samples", "hop_subsamples_{}k_per_set_{}_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, fcs_filename.split(".")[0], args.scale_factor, args.iteration))).X
 
     orig_sv = np.sqrt(1.0 / orig_samples.shape[0]) * np.linalg.svd(orig_samples, compute_uv=False)
     kh_sv = np.sqrt(1.0 / np.asarray(kh_samples).shape[0]) * np.linalg.svd(kh_samples, compute_uv=False)
@@ -126,18 +120,18 @@ def singular_values_helper():
         # Save singular values for each num_samples_per_set
         sv_results.append([num_samples_per_set, kh_final_sv, iid_final_sv, geo_final_sv, hop_final_sv])       # Columns are methods
     final = pd.DataFrame(sv_results, columns=['Samples per set', 'KH', 'IID', 'Geo', 'Hopper'])
-    final.to_csv(os.path.join(data_path, "metrics_results", "sv_evaluation.csv"))
+    final.to_csv(os.path.join(args.output_path, "metrics_results", "sv_evaluation.csv"))
 
 
 
 def cluster_freq_eval(fcs_filename):
     cluster_freq_metric = []
     for num_samples_per_set in num_samples_per_set_range:
-        orig_samples = anndata.read_h5ad(os.path.join(data_path, "orig_samples", "orig_subsamples_{}k_per_set_{}_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, fcs_filename.split(".")[0], scale_factor, iteration))).X
-        kh_samples = anndata.read_h5ad(os.path.join(data_path, "kh_samples", "kh_subsamples_{}k_per_set_{}_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, fcs_filename.split(".")[0], scale_factor, iteration))).X
-        iid_samples = anndata.read_h5ad(os.path.join(data_path, "iid_samples", "iid_subsamples_{}k_per_set_{}_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, fcs_filename.split(".")[0], scale_factor, iteration))).X
-        geo_samples = anndata.read_h5ad(os.path.join(data_path, "geo_samples", "geo_subsamples_{}k_per_set_{}_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, fcs_filename.split(".")[0], scale_factor, iteration))).X
-        hop_samples = anndata.read_h5ad(os.path.join(data_path, "hop_samples", "hop_subsamples_{}k_per_set_{}_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, fcs_filename.split(".")[0], scale_factor, iteration))).X
+        orig_samples = anndata.read_h5ad(os.path.join(args.output_path, "orig_samples", "orig_subsamples_{}k_per_set_{}_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, fcs_filename.split(".")[0], args.scale_factor, args.iteration))).X
+        kh_samples = anndata.read_h5ad(os.path.join(args.output_path, "kh_samples", "kh_subsamples_{}k_per_set_{}_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, fcs_filename.split(".")[0], args.scale_factor, args.iteration))).X
+        iid_samples = anndata.read_h5ad(os.path.join(args.output_path, "iid_samples", "iid_subsamples_{}k_per_set_{}_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, fcs_filename.split(".")[0], args.scale_factor, args.iteration))).X
+        geo_samples = anndata.read_h5ad(os.path.join(args.output_path, "geo_samples", "geo_subsamples_{}k_per_set_{}_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, fcs_filename.split(".")[0], args.scale_factor, args.iteration))).X
+        hop_samples = anndata.read_h5ad(os.path.join(args.output_path, "hop_samples", "hop_subsamples_{}k_per_set_{}_gamma{}x_{}.h5ad".format(num_samples_per_set / 1000, fcs_filename.split(".")[0], args.scale_factor, args.iteration))).X
 
         cluster_range = [10, 30, 50]
         for num_clusters in cluster_range:
@@ -173,34 +167,43 @@ def cluster_freq_helper():
 
         sample_cluster_results = cluster_freq_eval(fcs_filename)
         cluster_results = pd.concat([cluster_results, sample_cluster_results])
-        if(dataset == 'hvtn' and ((i % 10 == 0) and i > 0)):
+        if((i % 10 == 0) and i > 0):        # Write to disk after every 10 sample sets
             # save to disk after
             print("Finished {} sample sets. Saving current results to disk".format(i+1))
             copy = cluster_results.copy()
             cluster_freq_avg_l1 = copy.groupby(by=['subsamples', 'clusters']).mean()
             cluster_freq_avg_l1.reset_index(drop=False, inplace=True)
-            cluster_freq_avg_l1.to_csv(os.path.join(data_path, "metrics_results", "cluster_freq_evaluation.csv"))
+            cluster_freq_avg_l1.to_csv(os.path.join(args.output_path, "metrics_results", "cluster_freq_evaluation.csv"))
         print("Finished calculating Cluster Frequency for {}".format(fcs_filename))
 
     cluster_freq_avg_l1 = cluster_results.groupby(by=['subsamples', 'clusters']).mean()
     cluster_freq_avg_l1.reset_index(drop=False, inplace=True)
 
-    cluster_freq_avg_l1.to_csv(os.path.join(data_path, "metrics_results", "cluster_freq_evaluation.csv"))
+    cluster_freq_avg_l1.to_csv(os.path.join(args.output_path, "metrics_results", "cluster_freq_evaluation.csv"))
 
 
+if(__name__ == '__main__'):
+    parser = argparse.ArgumentParser()
+    # Required values
+    parser.add_argument('--input_path', metavar='i', help='path pointing to input anndata file', required=True)
+    parser.add_argument('--output_path', metavar='o', help='folder path for output data', required=True)
+    parser.add_argument('--sample_key', help='anndata key containing name of sample set', required=True)
+    # Optional values with defaults
+    parser.add_argument('--scale_factor', type=float,
+                        help='bandwidth scaling for Fourier features used in Kernel Herding', default=1.0)
+    parser.add_argument('--iteration', metavar='iter', type=int,
+                        help='Run iteration', default=1)
+    args = parser.parse_args()
+    print_args(vars(args))
 
-source_data_path = "/home/athreya/private/set_summarization/data/"
-if (dataset == 'nk'):
-    data_path = "/playpen-ssd/athreya/set_summarization/data/nk"
-    data = anndata.read_h5ad(os.path.join(source_data_path, "nk_cell_preprocessed.h5ad"))
-elif (dataset == 'pree'):
-    data_path = "/playpen-ssd/athreya/set_summarization/data/preeclampsia"
-    data = anndata.read_h5ad(os.path.join(source_data_path, "preeclampsia_preprocessed.h5ad"))
-else:
-    data_path = "/playpen-ssd/athreya/set_summarization/data/hvtn"
-    data = anndata.read_h5ad(os.path.join(source_data_path, "hvtn_preprocessed.h5ad"))
+    # input_path -: path to the source .h5ad file in order to fetch the list of sample sets
+        # Example
+        # input_path = "/home/athreya/private/set_summarization/data/"
+        # data = anndata.read_h5ad(os.path.join(input_path, "preeclampsia_preprocessed.h5ad"))
+    # output_path -: path to read the sketch data to calculate metrics as well as to write results file
+        # Example
+        # output_path = "/playpen-ssd/athreya/set_summarization/data/preeclampsia/"
 
-num_samples_per_set_range = [200, 500, 1000, 2500]
-scale_factor = 1.0
-iteration = 1
-fcs_files = data.obs.FCS_File.values.unique()
+    data = anndata.read_h5ad(args.input_path)
+    num_samples_per_set_range = [200, 500, 1000, 2500]      # Set to list of values for which sketch data exists
+    fcs_files = data.obs[args.sample_key].values.unique()

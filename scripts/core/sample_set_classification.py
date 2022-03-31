@@ -35,6 +35,7 @@ def setup_data_folders(output_path):
     os.makedirs(os.path.join(output_path, "kh_samples"), exist_ok=True)
     os.makedirs(os.path.join(output_path, "hop_samples"), exist_ok=True)
     os.makedirs(os.path.join(output_path, "geo_samples"), exist_ok=True)
+    os.makedirs(os.path.join(output_path, "merged_samples_data"), exist_ok=True)
     os.makedirs(os.path.join(output_path, "metrics_results"), exist_ok=True)
     os.makedirs(os.path.join(output_path, "classification_results"), exist_ok=True)
     os.makedirs(os.path.join(output_path, "logs"), exist_ok=True)
@@ -88,9 +89,8 @@ def nn_gamma_range(X):
 
 def print_args(args_dict):
     print("Argument values passed in current run -:")
-    # for k, v in sorted(args_dict):
-    #     print(k, " = ", v)
-    print(args_dict)
+    for k, v in sorted(args_dict.items()):
+        print(k, "=", v)
 
 
 def parallel_subsampling(fcs_filename):
@@ -172,7 +172,7 @@ if(__name__ == '__main__'):
     parser.add_argument('--num_processes', metavar='P', type=int,
                         help='number of processes used in parallel subsampling', default=10)
     parser.add_argument('--scale_factor', type=float,
-                        help='bandwidth scaling for Fourier features used in Kernel Herding', default=1)
+                        help='bandwidth scaling for Fourier features used in Kernel Herding', default=1.0)
     parser.add_argument('--iteration', metavar='iter', type=int,
                         help='Run iteration', default=1)
     parser.add_argument('--num_samples_per_set', metavar='n', type=int,
@@ -181,7 +181,6 @@ if(__name__ == '__main__'):
 
     args_dict = vars(args)
     print_args(args_dict)
-    setup_data_folders(args.output_path)
 
     if(args.proc == 'subsample'):
         # Preprocess HVTN data
@@ -194,10 +193,12 @@ if(__name__ == '__main__'):
         # output_data_path = "/playpen-ssd/athreya/set_summarization/data/nk"
 
         # data_path = "/home/athreya/private/set_summarization/data/"
-
         # data = anndata.read_h5ad(os.path.join(data_path, "hvtn_preprocessed.h5ad"))
         # data = anndata.read_h5ad(os.path.join(data_path, "preeclampsia_preprocessed.h5ad"))
         # data = anndata.read_h5ad(os.path.join(data_path, "nk_cell_preprocessed.h5ad"))
+
+        # Setup output folders
+        setup_data_folders(args.output_path)
 
         data = anndata.read_h5ad(args.input_path)
         print("Finished reading preprocessed data. Starting {} pools to subsample from sets start={} to end={} in the list of sample sets".format(args.num_processes, args.start, args.end))
@@ -223,9 +224,11 @@ if(__name__ == '__main__'):
         # output_data_path = "/playpen-ssd/athreya/set_summarization/data/preeclampsia"
         # output_data_path = "/playpen-ssd/athreya/set_summarization/data/nk"
 
+        # input_path -: parent folder which contains kh_samples, iid_samples, hop_samples, etc folders
+        # output_path -: {parent_folder}/merged_samples_data/
         import shutil
         for method in ["iid", "kh", "hop", "geo"]:
-            folder_path = os.path.join(args.output_path, "{}_samples".format(method))
+            folder_path = os.path.join(args.input_path, "{}_samples".format(method))
             file_regex = "gamma{}x_{}".format(args.scale_factor, args.iteration)
 
             # Merge subsample anndata
@@ -240,38 +243,40 @@ if(__name__ == '__main__'):
             # shutil.move(os.path.join(folder_path, output_file_name), os.path.join(output_data_path, output_file_name))
             # print("Merged {}".format(method))
 
-        with open(os.path.join(args.output_path, "finished_sets.txt"), 'w') as f:
-            f.write("Finished Merge for Scale Factor = {}, Iteration = {} -:".format(args.scale_factor, args.iteration))
+        print("Finished Merge for Scale Factor = {}, Iteration = {} -:".format(args.scale_factor, args.iteration))
 
 
     if(args.proc == 'classify'):
-        # KFold -> clustering -> cluster_freq vector -> classifier
+        # Number of unique sketches available for each method (Pairs of sketches are taken at a time,
+        # 1 is used for training and the other is used for test)
         num_sketches = 3
 
         # data_path = "/playpen-ssd/athreya/set_summarization/data/hvtn"
         # data_path = "/playpen-ssd/athreya/set_summarization/data/preeclampsia"
-        data_path = "/playpen-ssd/athreya/set_summarization/data/nk"
-
-        # output_data_path = "/playpen-ssd/athreya/set_summarization/data/hvtn/old_data"
+        # data_path = "/playpen-ssd/athreya/set_summarization/data/nk"
         # output_data_path = "/playpen-ssd/athreya/set_summarization/data/preeclampsia/loo_data"
-        output_data_path = "/playpen-ssd/athreya/set_summarization/data/nk/loo_data"
+        # output_data_path = "/playpen-ssd/athreya/set_summarization/data/nk/loo_data"
 
-        # results_file = "5fold_cv_classification_results_{}subsamples_{}.csv".format(num_samples_per_set / 1000, scale_factor)
-        # cross_validation(output_data_path, data_path, num_sketches, num_samples_per_set, results_file, scale_factor)
+
+        # 5-Fold Cross Validation
+        results_file = "5fold_cv_classification_results_{}subsamples_{}.csv".format(args.num_samples_per_set / 1000, args.scale_factor)
+        cross_validation(args.input_path, args.output_path, num_sketches, args.num_samples_per_set, results_file, args.scale_factor)
 
         # KH Leave One Out
         cluster_counts = [15, 30, 50]
 
+        # input_path -: {parent_folder}/merged_samples_data
+        # output_path -: {parent_folder} or wherever the results csv should be placed
         for num_clusters in cluster_counts:
             # output_data_path = "/playpen-ssd/athreya/set_summarization/data/hvtn/loo_data"
             # output_data_path = "/playpen-ssd/athreya/set_summarization/data/preeclampsia/loo_data"
-            output_data_path = "/playpen-ssd/athreya/set_summarization/data/nk/loo_data"
+            # output_data_path = "/playpen-ssd/athreya/set_summarization/data/nk/loo_data"
 
             results_file = "loo_classification_results_kh_{}subsamples_{}sketches_{}clusters.csv".format(args.num_samples_per_set / 1000, num_sketches, num_clusters)
-            leave_one_out_kh_validation(output_data_path, data_path, num_sketches, args.num_samples_per_set, args.num_processes, results_file, num_clusters)
+            # leave_one_out_kh_validation(args.input_path, args.output_path, num_sketches, args.num_samples_per_set, args.num_processes, results_file, num_clusters)
 
             # Other Methods Leave One Out
             results_file = "loo_classification_results_others_{}subsamples_{}sketches_{}clusters.csv".format(args.num_samples_per_set / 1000, num_sketches, num_clusters)
-            leave_one_out_others_validation(output_data_path, data_path, num_sketches, args.num_samples_per_set, args.num_processes, results_file, num_clusters)
+            leave_one_out_others_validation(args.input_path, args.output_path, num_sketches, args.num_samples_per_set, args.num_processes, results_file, num_clusters)
 
 
