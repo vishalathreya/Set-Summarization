@@ -88,6 +88,13 @@ def singular_values_eval(fcs_filename, num_samples_per_set):
     geo_sv = np.sqrt(1.0 / geo_samples.shape[0]) * np.linalg.svd(geo_samples, compute_uv=False)
     hop_sv = np.sqrt(1.0 / hop_samples.shape[0]) * np.linalg.svd(hop_samples, compute_uv=False)
 
+    # If number of features > number of samples (e.g sketch data shape = (500, 900)) while original data shape = (6000, 900)),
+    # len(orig_sv) == 900 != len(kh_sv) == 500. So we take the first min(len(orig_sv), len(kh_sv)) singular values in reverse sorted order
+    # which is what np.linalg.svd returns
+
+    if(len(orig_sv) > len(kh_sv)):
+        orig_sv = orig_sv[:len(kh_sv)]
+
     # Calculate L1 distance b/w true and sketched set
     kh_sv_l1 = np.linalg.norm(kh_sv - orig_sv, ord=1)
     iid_sv_l1 = np.linalg.norm(iid_sv - orig_sv, ord=1)
