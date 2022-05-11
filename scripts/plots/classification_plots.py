@@ -10,7 +10,7 @@ plt.rcParams['font.size'] = 10
 plt.rcParams['axes.linewidth'] = 2
 
 
-dataset = 'hvtn'
+dataset = 'nk'
 
 source_path = '/home/athreya/private/set_summarization/data/'
 if(dataset == 'hvtn'):
@@ -74,9 +74,10 @@ def LOO_CV_plot():
     plt.tick_params(axis='x', labelsize=10)
     #f2 = final_30.boxplot(column="Acc", by='Method', showmeans=True, showcaps=True)
     plt.legend()
-    plt.title("{} Dataset".format(figure_save_name))
-    #plt.show()
-    plt.savefig(os.path.join(data_path, '{}_LOO_30clusters.png'.format(file_save_name)), dpi=600, transparent=False, bbox_inches='tight')
+    plt.ylim([0,1])
+    plt.title("{}".format(figure_save_name))
+    # plt.show()
+    plt.savefig(os.path.join(data_path, '{}_LOO_30clusters_new.png'.format(file_save_name)), dpi=600, transparent=False, bbox_inches='tight')
 
 
     # f3 = final_50.boxplot(column="Acc", by='Method', showmeans=True, showcaps=True)
@@ -89,12 +90,11 @@ def LOO_CV_plot():
 
 # Plotting all clusters 5-Fold CV
 def five_fold_CV_plot():
-    my_pal = {method: sns.color_palette("muted")[3] if method == "Kernel Herding" else sns.color_palette("muted")[-1] for method in cv.subsampling.unique()}
-
     cv = pd.read_csv(os.path.join(data_path, "5fold_cv_classification_results_1.0.csv"))
     #cv = pd.read_csv(os.path.join(data_path, "5fold_cv_classification_results_{}subsamples_1.0.csv".format(subsamples / 1000)))
     cv.replace({"geo": "Geo-Sketch", "hop": "Hopper", "iid": "IID", "kh": "Kernel Herding"}, inplace=True)
 
+    my_pal = {method: sns.color_palette("muted")[3] if method == "Kernel Herding" else sns.color_palette("muted")[-1] for method in cv.subsampling.unique()}
     fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(15, 10))
 
     a2_15 = cv.loc[cv['clusters']==15]
@@ -135,12 +135,12 @@ def five_fold_CV_plot():
 
 
     # Separate figure with only 30 clusters 5-Fold CV
-    sns.boxplot(x=a2_30["subsampling"], y=a2_30["Acc"], palette=my_pal)
+    sns.boxplot(x=a2_15["subsampling"], y=a2_15["Acc"], palette=my_pal)
     plt.xlabel("")
     plt.ylabel("Classification Accuracy")
     plt.tick_params(axis='y', labelsize=10)
     plt.tick_params(axis='x', labelsize=10)
     plt.ylim(0,1)
-    plt.title("{} Dataset using 30 clusters".format(figure_save_name))
+    plt.title("{} Dataset using 15 clusters".format(figure_save_name))
     #plt.show()
-    plt.savefig(os.path.join(data_path, '{}_5-fold_30clusters_2.0x_kh_scale.png'.format(file_save_name)), dpi=600, transparent=False, bbox_inches='tight')
+    plt.savefig(os.path.join(data_path, '{}_5-fold_15clusters.png'.format(file_save_name)), dpi=600, transparent=False, bbox_inches='tight')
