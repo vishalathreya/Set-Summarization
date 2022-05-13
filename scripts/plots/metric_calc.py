@@ -50,27 +50,22 @@ def rfe_eval(fcs_filename):
 
     return kh_l1, iid_l1, geo_l1, hop_l1
 
+
 def rfe_helper():
     # Variables to accumulate L1 distance across sample sets
-    kh_final_l1, iid_final_l1, geo_final_l1, hop_final_l1 = np.zeros((1, len(num_samples_per_set_range))), np.zeros((1, len(num_samples_per_set_range))), \
-                                                            np.zeros((1, len(num_samples_per_set_range))), np.zeros((1, len(num_samples_per_set_range)))
-
+    l1_df = pd.DataFrame()
     for fcs_filename in fcs_files:
         kh_l1, iid_l1, geo_l1, hop_l1 = rfe_eval(fcs_filename)
-        kh_final_l1 += kh_l1
-        iid_final_l1 += iid_l1
-        geo_final_l1 += geo_l1
-        hop_final_l1 += hop_l1
+
+        l1_df_ = pd.DataFrame([np.repeat(fcs_filename, len(num_samples_per_set_range)),
+                               num_samples_per_set_range, kh_l1, iid_l1, geo_l1, hop_l1],
+                              index=['Sample Set', 'subsamples', 'Kernel Herding', 'IID', 'Geo-Sketch',
+                                     'Hopper']).transpose()
+
+        l1_df = pd.concat([l1_df_, l1_df], axis=0)
         print("Finished calculating RFE for {}".format(fcs_filename))
 
-    # Average across sample sets
-    kh_final_l1 /= len(fcs_files)
-    iid_final_l1 /= len(fcs_files)
-    geo_final_l1 /= len(fcs_files)
-    hop_final_l1 /= len(fcs_files)
-
-    l1_results = np.vstack((kh_final_l1, iid_final_l1, geo_final_l1, hop_final_l1)).T       # COLUMNS are methods
-    np.save(os.path.join(args.output_path, "metrics_results", "rfe_evaluation.npy"), l1_results)
+    l1_df.to_csv(os.path.join(args.output_path, "metrics_results", "rfe_evaluation.csv"))
 
 
 
@@ -103,32 +98,23 @@ def singular_values_eval(fcs_filename, num_samples_per_set):
 
     return kh_sv_l1, iid_sv_l1, geo_sv_l1, hop_sv_l1
 
+
 def singular_values_helper():
-    sv_results = []
+    sv_df = pd.DataFrame()
     # Variables to accumulate singular values across sample sets
     for num_samples_per_set in num_samples_per_set_range:
         print("Running singular values for {} samples per set".format(num_samples_per_set))
 
-        kh_final_sv, iid_final_sv, geo_final_sv, hop_final_sv = 0, 0, 0, 0
         for fcs_filename in fcs_files:
             kh_sv_l1, iid_sv_l1, geo_sv_l1, hop_sv_l1 = singular_values_eval(fcs_filename, num_samples_per_set)
-            kh_final_sv += kh_sv_l1
-            iid_final_sv += iid_sv_l1
-            geo_final_sv += geo_sv_l1
-            hop_final_sv += hop_sv_l1
+
+            sv_df_ = pd.DataFrame([fcs_filename, num_samples_per_set, kh_sv_l1, iid_sv_l1, geo_sv_l1, hop_sv_l1],
+                                    index = ['Sample Set', 'subsamples', 'Kernel Herding', 'IID', 'Geo-Sketch', 'Hopper']).transpose()
+
+            sv_df = pd.concat([sv_df_, sv_df], axis = 0)
             print("Finished calculating Singular Values for {}".format(fcs_filename))
 
-        # Average across sample sets
-        kh_final_sv /= len(fcs_files)
-        iid_final_sv /= len(fcs_files)
-        geo_final_sv /= len(fcs_files)
-        hop_final_sv /= len(fcs_files)
-
-        # Save singular values for each num_samples_per_set
-        sv_results.append([num_samples_per_set, kh_final_sv, iid_final_sv, geo_final_sv, hop_final_sv])       # Columns are methods
-    final = pd.DataFrame(sv_results, columns=['Samples per set', 'KH', 'IID', 'Geo', 'Hopper'])
-    final.to_csv(os.path.join(args.output_path, "metrics_results", "sv_evaluation.csv"))
-
+    sv_df.to_csv(os.path.join(args.output_path, "metrics_results", "sv_evaluation.csv"))
 
 
 def cluster_freq_eval(fcs_filename):
@@ -158,35 +144,31 @@ def cluster_freq_eval(fcs_filename):
                                      (geo_preds == i).sum() / geo_preds.shape[0],
                                      (hop_preds == i).sum() / hop_preds.shape[0]])
 
-            dfc = pd.DataFrame(cluster_rows, columns=["# clusters", "Original", "KH", "IID", "Geo", "Hopper"])
+            dfc = pd.DataFrame(cluster_rows, columns=["# clusters", "Original", "Kernel Herding", "IID", "Geo-Sketch", "Hopper"])
 
-            kh_avg_l1 = np.mean(np.abs((dfc['KH'] - dfc['Original']).values))
+            kh_avg_l1 = np.mean(np.abs((dfc['Kernel Herding'] - dfc['Original']).values))
             iid_avg_l1 = np.mean(np.abs((dfc['IID'] - dfc['Original']).values))
-            geo_avg_l1 = np.mean(np.abs((dfc['Geo'] - dfc['Original']).values))
+            geo_avg_l1 = np.mean(np.abs((dfc['Geo-Sketch'] - dfc['Original']).values))
             hop_avg_l1 = np.mean(np.abs((dfc['Hopper'] - dfc['Original']).values))
             cluster_freq_metric.append([fcs_filename, num_samples_per_set, num_clusters, kh_avg_l1, iid_avg_l1, geo_avg_l1, hop_avg_l1])
 
-    return pd.DataFrame(cluster_freq_metric, columns=['Sample Set', 'subsamples', 'clusters', 'kh', 'iid', 'geo', 'hopper'])
+    return pd.DataFrame(cluster_freq_metric, columns=['Sample Set', 'subsamples', 'clusters', 'Kernel Herding', 'IID', 'Geo-Sketch', 'Hopper'])
+
 
 def cluster_freq_helper():
-    cluster_results = pd.DataFrame(columns=['Sample Set', 'subsamples', 'clusters', 'kh', 'iid', 'geo', 'hopper'])
-    for i, fcs_filename in enumerate(fcs_files):
+    cluster_results = pd.DataFrame(columns=['Sample Set', 'subsamples', 'clusters', 'Kernel Herding', 'IID', 'Geo-Sketch', 'Hopper'])
 
+    for i, fcs_filename in enumerate(fcs_files):
         sample_cluster_results = cluster_freq_eval(fcs_filename)
         cluster_results = pd.concat([cluster_results, sample_cluster_results])
-        if((i % 10 == 0) and i > 0):        # Write to disk after every 10 sample sets
+        if ((i % 10 == 0) and i > 0):  # Write to disk after every 10 sample sets
             # save to disk after
-            print("Finished {} sample sets. Saving current results to disk".format(i+1))
+            print("Finished {} sample sets. Saving current results to disk".format(i + 1))
             copy = cluster_results.copy()
-            cluster_freq_avg_l1 = copy.groupby(by=['subsamples', 'clusters']).mean()
-            cluster_freq_avg_l1.reset_index(drop=False, inplace=True)
-            cluster_freq_avg_l1.to_csv(os.path.join(args.output_path, "metrics_results", "cluster_freq_evaluation.csv"))
+            copy.to_csv(os.path.join(args.output_path, "metrics_results", "cluster_freq_evaluation.csv"))
         print("Finished calculating Cluster Frequency for {}".format(fcs_filename))
 
-    cluster_freq_avg_l1 = cluster_results.groupby(by=['subsamples', 'clusters']).mean()
-    cluster_freq_avg_l1.reset_index(drop=False, inplace=True)
-
-    cluster_freq_avg_l1.to_csv(os.path.join(args.output_path, "metrics_results", "cluster_freq_evaluation.csv"))
+    cluster_results.to_csv(os.path.join(args.output_path, "metrics_results", "cluster_freq_evaluation.csv"))
 
 
 if(__name__ == '__main__'):

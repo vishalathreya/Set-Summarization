@@ -28,103 +28,91 @@ plt.rcParams['font.size'] = 10
 plt.rcParams['axes.linewidth'] = 2
 num_samples_per_set_range = [200, 500, 1000, 2500]
 
-def rfe_plot():
-    rfe = np.load(os.path.join(data_path, "rfe_evaluation.npy"))
-    fig, axes = plt.subplots(1, 2, figsize=(10, 5))
-    # min_y, max_y = rfe.min().min(), rfe.max().max()
-    # plt.setp(axes, ylim=(min_y, max_y))
-    axes[0].plot(num_samples_per_set_range, rfe[:, 2], label='Geo-Sketch', marker='x')
-    axes[0].plot(num_samples_per_set_range, rfe[:, 0], label='Kernel Herding', marker='x')
-    axes[0].plot(num_samples_per_set_range, rfe[:, 3], label='Hopper', marker='x')
-    axes[0].plot(num_samples_per_set_range, rfe[:, 1], label='IID', c='purple', marker='x')
-    axes[0].grid()
-    axes[0].set_xlabel("Number of sampled cells per set")
-    # axes[0].set_ylabel("Mean L1 distance RFE Value")
-    plt.suptitle("{} - Mean L1 distance b/w true and sketched RFE values".format(figure_save_name))
-    axes[0].legend(loc='upper right')
 
-    axes[1].plot(num_samples_per_set_range, rfe[:, 1], label='IID', c='purple', marker='x')
-    axes[1].plot(num_samples_per_set_range, rfe[:, 0], label='Kernel Herding', c='orange', marker='x')
-    axes[1].grid()
-    axes[1].set_xlabel("Number of sampled cells per set")
-    axes[1].legend()
+def rfe_plot():
+    methods = ['Geo-Sketch', 'Kernel Herding', 'Hopper', 'IID']
+    colors_dict = {'Geo-Sketch': 'tab:blue', 'Kernel Herding': 'tab:orange', 'Hopper': 'tab:green', 'IID': 'purple'}
+
+    rfe = pd.read_csv(os.path.join(data_path, 'rfe_evaluation.csv'), index_col=0)
+    rfe_melt = rfe.melt(id_vars=['subsamples', 'Sample Set'])
+    rfe_melt['log_value'] = np.log(rfe_melt['value'])
+
+    _, axes = plt.subplots(1, 1, figsize=(12, 5))
+    # g = sns.lineplot(x = "subsamples", y = "log_value", hue = 'variable', data = rfe_melt, style = 'variable',
+    #                 dashes=[""]*len(methods), markers=["o"]*len(methods), palette = colors_dict,
+    #                 ci = 'sd', err_style = 'bars', ax = axes, err_kws={'capsize': 6})
+    g = sns.lineplot(x="subsamples", y="log_value", hue='variable', data=rfe_melt, style='variable',
+                     dashes=[""] * len(methods), markers=["o"] * len(methods), palette=colors_dict,
+                     ci='sd', err_style='bars', ax=axes, err_kws={'capsize': 6})
+
+    g.grid()
+    g.set_xlabel("Number of Sampled Cells per set", size=16)
+    g.set_ylabel("Log (Mean L1 Distance of RFE Values) \n Between Original and Sketched Sample-Sets", size=16)
+    plt.legend(bbox_to_anchor=(1.01, 1), loc=2, borderaxespad=0., prop={'size': 12})
+    # g.set_ylim([-4.5, 2.5])
+    g.xaxis.set_tick_params(labelsize=18)
+    g.yaxis.set_tick_params(labelsize=18)
     # plt.show()
-    plt.savefig('{}_rfe_eval.png'.format(file_save_name), dpi=600, transparent=False, bbox_inches='tight')
+    plt.savefig(os.path.join(data_path, '{}_rfe_eval_new.png'.format(file_save_name)), dpi=600, transparent=False, bbox_inches='tight')
+
 
 def singular_values_plot():
-    sv = pd.read_csv(os.path.join(data_path, "sv_evaluation.csv"))
-    # sv = np.load(os.path.join(data_path, "sv_evaluation.npy"))
-    samples, kh_sv, iid_sv, geo_sv, hop_sv = sv['Samples per set'].values, sv['KH'].values, sv['IID'].values, sv['Geo'].values, sv['Hopper'].values
-    fig, axes = plt.subplots(1, 2, figsize=(15, 5))
-    # min_y, max_y = sv[['KH', 'IID', "Geo", "Hopper"]].min().min(), sv[['KH', 'IID', "Geo", "Hopper"]].max().max()
-    # plt.setp(axes, ylim=(min_y, max_y))
-    axes[0].plot(samples, geo_sv, label='Geo-Sketch', marker='x')
-    axes[0].plot(samples, kh_sv, label='Kernel Herding', marker='x')
-    axes[0].plot(samples, hop_sv, label='Hopper', marker='x')
-    axes[0].plot(samples, iid_sv, label='IID', c='purple', marker='x')
-    axes[0].legend()
-    axes[0].grid()
-    axes[0].title.set_text("All subsampling methods")
-    axes[0].set_xlabel("Number of sampled cells per set")
-    axes[0].set_ylabel("Mean L1 distance b/w true and sketched Singular Values")
+    methods = ['Geo-Sketch', 'Kernel Herding', 'Hopper', 'IID']
+    colors_dict = {'Geo-Sketch': 'tab:blue', 'Kernel Herding': 'tab:orange', 'Hopper': 'tab:green', 'IID': 'purple'}
 
-    axes[1].plot(samples, kh_sv[:10], label='Kernel Herding', c='orange', marker='x')
-    axes[1].plot(samples, iid_sv[:10], label='IID', c='purple', marker='x')
-    axes[1].grid()
-    axes[1].legend()
-    axes[1].set_xlabel("Number of sampled cells per set")
-    # axes[1].set_ylabel("Sum of mean L1 distance b/w true and sketched Singular Values")
-    axes[1].title.set_text("IID and Kernel Herding close-up")
+    sv = pd.read_csv(os.path.join(data_path, 'sv_evaluation.csv'), index_col=0)
+    sv_melt = sv.melt(id_vars=['subsamples', 'Sample Set'])
+    sv_melt['log_value'] = np.log(sv_melt['value'])
+
+    _, axes = plt.subplots(1, 1, figsize=(6, 5))
+    g = sns.lineplot(x="subsamples", y="log_value", hue='variable', data=sv_melt, style='variable',
+                     dashes=[""] * len(methods), markers=["o"] * len(methods), palette=colors_dict,
+                     ci='sd', err_style='bars', ax=axes, err_kws={'capsize': 6})
+
+    g.grid()
+    g.set_xlabel("Number of Sketched Cells", size=16)
+    g.set_ylabel("Log (Mean L1 Distance of Singular Values) \n Between Original and Sketched Sample-Sets", size=16)
+    plt.legend(bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0., prop={'size': 14})
+    g.set_ylim([-4, 4])
+    g.xaxis.set_tick_params(labelsize=18)
+    g.yaxis.set_tick_params(labelsize=18)
     # plt.show()
-
-    fig.suptitle("{} Dataset Singular Value Comparison".format(figure_save_name))
-    plt.savefig('{}_singular_values_all.png'.format(file_save_name), dpi=600, transparent=False, bbox_inches='tight')
+    plt.savefig(os.path.join(data_path, '{}_singular_values_new.png'.format(file_save_name)), dpi=600,
+                transparent=False, bbox_inches='tight')
 
 
 def cluster_freq_plot():
-    df = pd.read_csv(os.path.join(data_path, "cluster_freq_evaluation.csv"))
-    min_y, max_y = df[['kh', 'iid', 'geo', 'hopper']].min().min(), df[['kh', 'iid', 'geo', 'hopper']].max().max() + 0.01
-    fig, axes = plt.subplots(1, 3, figsize=(25, 5))
-    plt.setp(axes, ylim=(min_y, max_y))
+    methods = ['Geo-Sketch', 'Kernel Herding', 'Hopper', 'IID']
+    colors_dict = {'Geo-Sketch': 'tab:blue', 'Kernel Herding': 'tab:orange', 'Hopper': 'tab:green', 'IID': 'purple'}
 
-    axes[0].plot(df.loc[df['clusters'] == 10]['subsamples'].values, df.loc[df['clusters'] == 10]['geo'].values,
-                 label='Geo-Sketch', marker='x')
-    axes[0].plot(df.loc[df['clusters'] == 10]['subsamples'].values, df.loc[df['clusters'] == 10]['kh'].values, label='KH', marker='x')
-    axes[0].plot(df.loc[df['clusters'] == 10]['subsamples'].values, df.loc[df['clusters'] == 10]['hopper'].values,
-                 label='Hopper', marker='x')
-    axes[0].plot(df.loc[df['clusters'] == 10]['subsamples'].values, df.loc[df['clusters'] == 10]['iid'].values,
-                 label='IID', c='purple', marker='x')
-    axes[0].title.set_text("10 clusters")
-    axes[0].legend(loc='upper right')
-    axes[0].grid()
-    axes[0].set_xlabel("Number of sampled cells per set")
-    axes[0].set_ylabel("Mean L1 distance b/w true and sketched cluster frequencies")
+    cfreq = pd.read_csv(os.path.join(data_path, 'cluster_freq_evaluation.csv'), index_col=0)
+    min_y, max_y = cfreq[['Kernel Herding', 'IID', 'Geo-Sketch', 'Hopper']].min().min(), cfreq[
+        ['Kernel Herding', 'IID', 'Geo-Sketch', 'Hopper']].max().max() + 0.005
+    clusters = np.unique(cfreq['clusters'])
 
-    axes[1].plot(df.loc[df['clusters'] == 30]['subsamples'].values, df.loc[df['clusters'] == 30]['geo'].values,
-                 label='Geo-Sketch', marker='x')
-    axes[1].plot(df.loc[df['clusters'] == 30]['subsamples'].values, df.loc[df['clusters'] == 30]['kh'].values, label='KH', marker='x')
-    axes[1].plot(df.loc[df['clusters'] == 30]['subsamples'].values, df.loc[df['clusters'] == 30]['hopper'].values,
-                 label='Hopper', marker='x')
-    axes[1].plot(df.loc[df['clusters'] == 30]['subsamples'].values, df.loc[df['clusters'] == 30]['iid'].values,
-                 label='IID', c='purple', marker='x')
-    axes[1].title.set_text("30 clusters")
-    axes[1].legend()
-    axes[1].grid()
-    axes[1].set_xlabel("Number of sampled cells per set")
+    cfreq_melt = cfreq.melt(id_vars=['subsamples', 'clusters', 'Sample Set'])
+    fig, axes = plt.subplots(1, len(clusters), figsize=(21, 5.5), gridspec_kw={'wspace': 0.175, 'bottom': 0.15})
+    for i, ax in zip(range(0, len(clusters)), axes.flat):
+        cfreq_subset = cfreq_melt[cfreq_melt['clusters'] == clusters[i]]
+        g = sns.lineplot(x="subsamples", y="value", hue='variable', data=cfreq_subset, style='variable',
+                         palette=colors_dict, dashes=[""] * len(methods), markers=["o"] * len(methods), ax=ax,
+                         ci='sd', err_style='bars', err_kws={'capsize': 6})
+        g.grid()
+        ax.legend(loc='upper right', prop={'size': 14})
+        g.xaxis.set_tick_params(labelsize=18)
+        g.yaxis.set_tick_params(labelsize=18)
+        g.set_ylim(0, 0.13)
+        g.set_xlabel('')
+        g.set_ylabel('')
+        g.set_title(str(clusters[i]) + ' clusters', fontsize=18)
 
-    axes[2].plot(df.loc[df['clusters'] == 50]['subsamples'].values, df.loc[df['clusters'] == 50]['geo'].values,
-                 label='Geo-Sketch', marker='x')
-    axes[2].plot(df.loc[df['clusters'] == 50]['subsamples'].values, df.loc[df['clusters'] == 50]['kh'].values, label='KH', marker='x')
+    title_ax = fig.add_subplot(111, frame_on=False)
+    title_ax.set_xticks([])
+    title_ax.set_yticks([])
+    plt.tick_params(labelcolor='none', top='off', bottom='off', left='off', right='off')
+    fig.text(0.5, 0.04, "Number of Sketched Cells", ha="center", va="center", fontsize=18)
+    fig.text(0.07, 0.5, "Mean L1 Distance of Cluster Frequencies \n Between Original and Sketched Sample-Sets",
+             ha="center", va="center", rotation=90, fontsize=16)
 
-    axes[2].plot(df.loc[df['clusters'] == 50]['subsamples'].values, df.loc[df['clusters'] == 50]['hopper'].values,
-                 label='Hopper', marker='x')
-    axes[2].plot(df.loc[df['clusters'] == 50]['subsamples'].values, df.loc[df['clusters'] == 50]['iid'].values,
-                 label='IID', c='purple', marker='x')
-    axes[2].legend()
-    axes[2].grid()
-    axes[2].set_xlabel("Number of sampled cells per set")
-    axes[2].title.set_text("50 clusters")
-
-    fig.suptitle("{} Dataset Subsample Cluster Frequency Comparison".format(figure_save_name))
-    plt.savefig('{}_cluster_freq.png'.format(file_save_name), dpi=600, transparent=False, bbox_inches='tight')
-
+    plt.savefig(os.path.join(data_path, '{}_cluster_freq_new.png'.format(file_save_name)), dpi=600, transparent=False,
+                bbox_inches='tight')
