@@ -6,8 +6,11 @@ Please download the datasets used in the paper from the Zenodo repository-: http
 
 ## Sample Commands for running scripts
 scripts/core/sample_set_classification.py --> driver script with options to subsample/sketch from input datasets, merge sketched files together and perform classification experiments outlined in the paper.
+
 scripts/core/model.py --> contains the Kernel Herding Algorithm, Computation of Random Fourier Features, Cluster Centroids and Frequency vectors.
+
 scripts/core/train.py --> Leave One Out training experiment setups
+
 scripts/plots/metric_calc.py --> Random Function Evaluation, Singular Values and Cluster frequency calculation
 
 
